@@ -1,0 +1,375 @@
+{
+  "name": "System Documentation: Create Project Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "d0b91f11-487b-441f-80a3-17edd5a703db",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        60
+      ],
+      "id": "7bd05637-98d5-4986-afb9-68c342559222",
+      "name": "Webhook",
+      "webhookId": "d0b91f11-487b-441f-80a3-17edd5a703db"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_contexts (project_name, session_id, status, lead_contact, description, notes, rag_session_id)\nVALUES ($1, $2, $3, $4, $5, $6, $7)\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ $json.sql_params }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        400,
+        260
+      ],
+      "id": "5afd6863-a738-4995-af87-0126ac7310cf",
+      "name": "Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        260
+      ],
+      "id": "e5a01ed1-3745-42b9-bde8-8eb217daafb6",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"A project with this name already exists. Please choose a different name.\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        180,
+        60
+      ],
+      "id": "2162eaa1-505d-45af-9928-f61382a7b544",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "afe88938-a540-43b8-9c58-c6f7e6903de1",
+              "leftValue": "={{ $items(\"Check if Project Exists\").length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        160
+      ],
+      "id": "202853be-ac04-438b-9eac-21c83444b10f",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the data from the previous node.\nconst data = $input.item.json;\n\n// --- FIX: Generate a NEW rag_session_id ---\n// We will create a unique ID for the RAG memory store.\nconst ragSessionId = 'rag_' + Math.random().toString(36).substring(2, 9);\n\n// Get the project name from the webhook's body property.\nconst projectName = data.body.projectName;\n\n// Generate a unique session ID for the project itself.\nconst sessionId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);\n\n// Set default values for the columns that actually exist.\nconst leadContact = \"\";\nconst status = \"New\";\nconst description = \"\";\nconst notes = \"\";\n\n// This is the chat session ID, which can be empty for a new project.\nconst chat_session_id = \"\"; \n\n// --- Assemble the final parameters for the SQL query ---\nconst sql_params = [\n  projectName,\n  sessionId,\n  status,\n  leadContact,\n  description,\n  notes,\n  ragSessionId // Use our newly generated ID\n];\n\n// Return the parameters for the next node.\nreturn {\n  json: {\n    sql_params: sql_params\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        260
+      ],
+      "id": "2821fd93-7847-4cfe-b255-1fa69d552a51",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT project_name FROM project_contexts WHERE project_name = $1;",
+        "options": {
+          "queryReplacement": "=[{{ $json.body.projectName }}]"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -40,
+        -40
+      ],
+      "id": "019cb683-1858-4216-a52e-fe65be7bfa3a",
+      "name": "Check if Project Exists",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n  ({\n    \"project_id\": $('Postgres').first().json.xata_id,\n    \"session_id\": $('Generate Thread ID').first().json.new_thread_id\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1060,
+        260
+      ],
+      "id": "dc27ba05-0bf6-4d6a-a287-57aa90058fd2",
+      "name": "Prepare Success Response",
+      "notes": "test"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate a unique session ID for the new thread\nconst new_thread_id = `session_${Math.random().toString(36).slice(2, 11)}`;\nreturn { new_thread_id: new_thread_id };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        260
+      ],
+      "id": "cd1f13bf-6a40-4663-a4ec-b5aaa32dd3db",
+      "name": "Generate Thread ID"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE project_contexts SET chat_session_id = $1 WHERE xata_id = $2;",
+        "options": {
+          "queryReplacement": "={{ $('Generate Thread ID').first().json.new_thread_id }}\n{{ $('Postgres').first().json.xata_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        840,
+        260
+      ],
+      "id": "28b677c8-75b7-46c5-a19f-8fee58addb0f",
+      "name": "Save Thread ID to Project",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: Create Project Workflow\n\n\nWorkflow Name: Create Project Workflow (as inferred from context)\nSource File: Main_Chat_Workflow_for_Documentation (1).json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the dedicated backend process for creating a new, simple project. Its sole purpose is to receive a project name from the UI, ensure it doesn't already exist, create all the necessary records and IDs in the database, and return a success response to the UI so a new chat session can begin. It acts as a secure and robust entry point for Scenario 1.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...d0b91f11...) listens for POST requests from the Chat 8 UI.\nDatabase: It interacts exclusively with the project_contexts table in the Postgres database to check for duplicates and create new project records.\nLogic: The workflow follows a simple conditional path: if the project already exists, it fails gracefully; if not, it proceeds with creation.\n3. Step-by-Step Data Flow\nThe workflow executes in a clear, linear sequence:\nWebhook: The workflow is triggered when the user submits a new project name from the UI. The payload contains { \"projectName\": \"...\" }.\nCheck if Project Exists: A Postgres node immediately queries the project_contexts table to see if any record already has the provided projectName.\nIf (Project Exists?): An If node checks the result of the previous query.\nIf True (project exists): The workflow takes the True branch and immediately triggers the Respond to Webhook1 node, which sends a specific error message back to the UI, stopping the process.\nIf False (project is new): The workflow proceeds down the main False branch to create the project.\nCode (Prepare SQL Parameters): A Code node runs to prepare the data for the database INSERT command. It generates a unique rag_session_id and sessionId and assembles all the required values into an array (sql_params).\nPostgres (Create Project Record): This Postgres node executes the main INSERT query, using the sql_params from the previous step to create the new record in the project_contexts table. Crucially, it uses RETURNING * to output the full, newly created database row, including the permanent xata_id.\nGenerate Thread ID: A Code node generates a new, unique chat_session_id (formatted as session_...).\nSave Thread ID to Project: A Postgres node executes an UPDATE query. It takes the new_thread_id and the xata_id from the previous steps and updates the project record to include the new chat session ID.\nPrepare Success Response: A Set node takes the project_id (from the xata_id) and the session_id (from the new_thread_id) and formats them into a clean JSON object.\nRespond to Webhook: The final Respond to Webhook node sends this success object back to the UI, providing it with all the necessary IDs to initialize the new chat session.",
+        "height": 80,
+        "width": 600
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        400,
+        140
+      ],
+      "id": "29777220-8757-4d32-8b5c-f71ce388c6d1",
+      "name": "Sticky Note4"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "mhcmike.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "content-length": "33",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.9",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "72.219.130.70",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "96bc1b3581078b10-PDX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "origin": "http://127.0.0.1:5500",
+            "priority": "u=1, i",
+            "referer": "http://127.0.0.1:5500/",
+            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "72.219.130.70, 104.23.160.56",
+            "x-forwarded-host": "mhcmike.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-34-f494454b5-f88k9",
+            "x-is-trusted": "yes",
+            "x-real-ip": "72.219.130.70"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "projectName": "New Mike Test 2"
+          },
+          "webhookUrl": "https://mhcmike.app.n8n.cloud/webhook/d0b91f11-487b-441f-80a3-17edd5a703db",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check if Project Exists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres": {
+      "main": [
+        [
+          {
+            "node": "Generate Thread ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Success Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Thread ID": {
+      "main": [
+        [
+          {
+            "node": "Save Thread ID to Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Thread ID to Project": {
+      "main": [
+        [
+          {
+            "node": "Prepare Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1fb22959-07b3-4221-b5c5-fb45d7a95388",
+  "meta": {
+    "instanceId": "c4c30886ead33627446590bc73a5bef82db63d1121e51ff9b9b6f6ea92a27ca3"
+  },
+  "id": "7cBDi5nbXy6LSodS",
+  "tags": []
+}

@@ -1,0 +1,2813 @@
+{
+  "name": "Master Workflow 6.1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "d0b91f11-487b-441f-80a3-17edd5a703db",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1480,
+        1535
+      ],
+      "id": "291c3478-fb25-45dc-8c71-84c589e2c5ca",
+      "name": "Webhook",
+      "webhookId": "d0b91f11-487b-441f-80a3-17edd5a703db"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_contexts (project_name, session_id, status, lead_contact, description, notes, rag_session_id)\nVALUES ($1, $2, $3, $4, $5, $6, $7)\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ $json.sql_params }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -820,
+        1735
+      ],
+      "id": "b81f8c20-0af4-47eb-b4d5-f7beb7879b06",
+      "name": "Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        1735
+      ],
+      "id": "5a5f8570-d23b-4026-8a6f-58177c015310",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"A project with this name already exists. Please choose a different name.\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        -1040,
+        1535
+      ],
+      "id": "d5362a10-a41a-4c04-bced-5b634bec9174",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "afe88938-a540-43b8-9c58-c6f7e6903de1",
+              "leftValue": "={{ $items(\"Check if Project Exists\").length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1260,
+        1635
+      ],
+      "id": "db34214f-7cee-470e-aee9-9960cb662bfe",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the data from the previous node.\nconst data = $input.item.json;\n\n// --- FIX: Generate a NEW rag_session_id ---\n// We will create a unique ID for the RAG memory store.\nconst ragSessionId = 'rag_' + Math.random().toString(36).substring(2, 9);\n\n// Get the project name from the webhook's body property.\nconst projectName = data.body.projectName;\n\n// Generate a unique session ID for the project itself.\nconst sessionId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);\n\n// Set default values for the columns that actually exist.\nconst leadContact = \"\";\nconst status = \"New\";\nconst description = \"\";\nconst notes = \"\";\n\n// This is the chat session ID, which can be empty for a new project.\nconst chat_session_id = \"\"; \n\n// --- Assemble the final parameters for the SQL query ---\nconst sql_params = [\n  projectName,\n  sessionId,\n  status,\n  leadContact,\n  description,\n  notes,\n  ragSessionId // Use our newly generated ID\n];\n\n// Return the parameters for the next node.\nreturn {\n  json: {\n    sql_params: sql_params\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1040,
+        1735
+      ],
+      "id": "593f2d07-f098-4542-b507-02c2df4c1ec5",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT project_name FROM project_contexts WHERE project_name = $1;",
+        "options": {
+          "queryReplacement": "=[{{ $json.body.projectName }}]"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1260,
+        1435
+      ],
+      "id": "31cd98fc-3343-4ae1-91a0-f396a6f3968d",
+      "name": "Check if Project Exists",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n  ({\n    \"project_id\": $('Postgres').first().json.xata_id,\n    \"session_id\": $('Generate Thread ID').first().json.new_thread_id\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -160,
+        1735
+      ],
+      "id": "4828f4ab-7b86-40e4-82f1-1854ef6f6f4d",
+      "name": "Prepare Success Response",
+      "notes": "test"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate a unique session ID for the new thread\nconst new_thread_id = `session_${Math.random().toString(36).slice(2, 11)}`;\nreturn { new_thread_id: new_thread_id };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        1735
+      ],
+      "id": "1e194fde-0506-4a8b-8621-10b6cbdf5baa",
+      "name": "Generate Thread ID"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE project_contexts SET chat_session_id = $1 WHERE xata_id = $2;",
+        "options": {
+          "queryReplacement": "={{ $('Generate Thread ID').first().json.new_thread_id }}\n{{ $('Postgres').first().json.xata_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -380,
+        1735
+      ],
+      "id": "6a65a6f9-cd9c-4025-b673-7abea25cf533",
+      "name": "Save Thread ID to Project",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        2445
+      ],
+      "id": "95d68cd0-ba5a-478d-b1fa-3cbbf23ea40a",
+      "name": "HTTP Request1",
+      "credentials": {
+        "googleApi": {
+          "id": "ibcCVTnTEjkd4DaY",
+          "name": "Google Service Account account"
+        },
+        "openAiApi": {
+          "id": "coeze5tlOwYaVsLb",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Code1 - Mode: Run Once for EACH Item\n// Input: A single item from HTTP Request1 (OpenAI API response)\n// Output: An object { reply: \"...\", toast?: \"...\" }\n\nconst openAIResponse = $input.item.json; \nlet replyText = \"Error: Could not extract reply from AI response in Code1.\"; \nlet toast;\n\nif (openAIResponse && \n    openAIResponse.choices && \n    openAIResponse.choices.length > 0 &&\n    openAIResponse.choices[0].message &&\n    typeof openAIResponse.choices[0].message.content === 'string') {\n  \n  let rawReply = openAIResponse.choices[0].message.content;\n  \n  // --- ADD CLEANING & TRUNCATION ---\n  // Remove non-printable ASCII except common whitespace.\n  let cleanedReply = rawReply.replace(/[^\\x20-\\x7E\\n\\r\\t]+/g, ''); \n\n  const maxLength = 15000;\n  if (cleanedReply.length > maxLength) {\n    cleanedReply = cleanedReply.substring(0, maxLength) + \"... (truncated)\";\n  }\n  replyText = cleanedReply;\n  // --- END CLEANING & TRUNCATION ---\n\n  // If auto-commit ran this turn, append a short memory status line to the reply and expose a toast field.\n  try {\n    const autoNode = $node[\"Auto Commit via Webhook\"]?.first();\n    const statusLine = autoNode?.json?.status_line;\n    const toastLine = autoNode?.json?.toast;\n    if (statusLine) {\n      replyText += \"\\n\\n\" + statusLine;\n    }\n    if (toastLine) { toast = toastLine; }\n  } catch (e) { /* ignore if node didn't run */ }\n\n  console.log(\"Code1 Extracted AND PROCESSED AI reply:\", replyText);\n\n} else {\n  console.error(\"Code1: Could not extract AI reply from OpenAI response. Input item.json was:\", JSON.stringify(openAIResponse, null, 2));\n}\n\nconst out = { reply: replyText };\nif (toast) out.toast = toast;\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        2445
+      ],
+      "id": "b142debd-3865-4670-9eff-b1584b4df10b",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Prepare Consolidated RAG Context v1.0 ---\n// This script takes the single block of consolidated RAG text\n// and formats it correctly for the final prompt.\n\n// Get the combined context from the previous node's output.\nconst combinedContext = $input.item.json.combined_rag_context;\n\n// Create a single \"context\" object that the Merge node can use.\n// We will assign it the role of \"system\" to indicate it's background info.\nconst formattedRagContext = {\n  role: 'system',\n  content: `--- CONTEXT FROM KNOWLEDGE BASE ---\\n${combinedContext}`\n};\n\n// Return a single item containing this formatted object.\nreturn [{\n  json: formattedRagContext\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        2370
+      ],
+      "id": "33e1d983-cbac-45fe-b7bd-ec448319f9db",
+      "name": "Format History for AI",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    \"model\": \"text-embedding-3-small\",\n    \"input\": $('Get Session ID & Input').item.json.chatInput\n  }\n}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -380,
+        2370
+      ],
+      "id": "aa28d984-307a-4ef7-b19c-31f2faba61e1",
+      "name": "Create Query Embedding",
+      "credentials": {
+        "openAiApi": {
+          "id": "jSjNufUyszBKKWwb",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node receives two inputs.\n// Input 0: From \"Create Query Embedding\"\n// Input 1: From the initial Webhook trigger\n\n// Get the embedding from the embedding creation node (input 0)\nconst embeddingData = $input.all(0)[0].json;\nconst embedding = embeddingData.data[0].embedding;\n\n// Get the data directly from the initial Webhook trigger node by its name\nconst triggerData = $('Webhook1').first().json;\n\n// Get the RAG session ID from the webhook's parsed JSON body\nconst ragSessionId = triggerData.body.rag_session_id;\n\n// Format the embedding vector into the string format for pgvector.\nconst query_embedding_for_pg = '[' + embedding.join(',') + ']';\n\n// Create the final output object.\n// It's crucial that this object has a 'json' property containing our data.\nreturn {\n  json: {\n    query_embedding_for_pg: query_embedding_for_pg,\n    current_session_id_for_search: ragSessionId\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        2370
+      ],
+      "id": "0f9783d2-97a9-43e0-8141-d7ec79ca5d37",
+      "name": "Format Data for Vector Search"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body;\n\nif (!body.chat_session_id || typeof body.chat_session_id !== 'string') {\n  throw new Error(\"The 'chat_session_id' field is missing or invalid in the webhook body.\");\n}\nif (!body.chatInput && !body.imageData) {\n  throw new Error(\"The 'chatInput' field and 'imageData' are missing from the webhook body.\");\n}\n\n// Pass ALL required IDs and imageData downstream.\nreturn [{\n  json: {\n    chatInput: body.chatInput,\n    imageData: body.imageData || null,\n    session_Id: body.chat_session_id,\n    rag_session_Id: body.rag_session_id,\n    project_Id: body.project_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1260,
+        2195
+      ],
+      "id": "ff823592-c615-40b0-b188-d38cfd8400ac",
+      "name": "Get Session ID & Input"
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: Main Chat Workflow\n\n\nWorkflow Name: Main Chat Workflow for Documentation\nVersion: As of file provided\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis n8n workflow serves as the central orchestration layer for the Chat 8 user interface. Its primary purpose is to receive user input, intelligently enrich it with multiple forms of context—long-term memory from a RAG store and short-term conversational history—and generate a context-aware response from a large language model. It also includes a new feature for automatically committing \"remember\" intents to memory.\n2. Key Components & Architecture\nThe system is comprised of several key components that work in concert:\nFrontend: The Chat 8 UI (Chat_8_V7.html) captures user input and displays the final response.\nBackend Orchestration: This n8n workflow manages the entire data flow and logic.\nLong-Term Memory: A Postgres database containing the rag_store for vectorized knowledge.\nShort-Term Memory: The same Postgres database, using the conversation_history table for recent conversational turns.\nThe workflow's core architecture is a multi-branch parallel processing system. After initial input, it splits into distinct paths to gather different types of context, which are then merged before the final AI call.\n3. Step-by-Step Data Flow\nThe workflow executes in several distinct phases:\nPhase 1: Ingestion and Preparation\nWebhook1: The workflow is triggered by a POST request from the UI. It is configured to handle pre-flight OPTIONS requests for CORS compatibility.\nGet Session ID & Input: A Code node parses the incoming request body. It validates that chat_session_id and chatInput are present and transforms all key IDs to a consistent camelCase format (session_Id, rag_session_Id, project_Id) for use within the workflow.\nSave User Message to History: A Postgres node immediately saves the user's message to the conversation_history table, ensuring a complete and persistent log of the interaction.\nPreserve Current Inputs: A critical Set node creates a stable, preserved copy of the key inputs (session_Id, chatInput, rag_session_Id, etc.). This node acts as a central hub, providing a reliable data source for all subsequent parallel branches.\nPhase 2: Auto-Commit Branch (Side Process)\nRunning in parallel to the main chat logic.\nConfig: Auto-Commit Enabled: A Set node acts as a feature flag, enabling the auto-commit functionality.\nIf Remember Intent: An If node checks if the user's chatInput starts with the word \"remember\".\nAuto Commit via Webhook: If the intent is to remember, an HTTPRequest node triggers the separate \"Commit to Memory\" workflow, passing the necessary IDs to save the new fact in the background.\nPhase 3: Main Logic Branching\nIf Rag is Active: This is the primary traffic controller. It checks if a rag_session_Id was provided.\nIf True: The workflow proceeds down the full RAG path to retrieve long-term memory.\nIf False: The workflow bypasses the RAG steps and proceeds directly to retrieve only the short-term conversational history.\nPhase 4: The RAG Path (Dual-Retrieval)\nThis path executes if RAG is active.\nCreate Query Embedding: An HTTPRequest node takes the user's chatInput and calls the OpenAI API to convert it into a vector embedding.\nFormat Data for Vector Search: A Code node prepares the data for the database search, formatting the embedding vector into the required string format for pgvector.\nParallel Retrieval: The workflow splits again to perform two simultaneous database lookups:\nRetrieve Committed Memory: A Postgres node searches the rag_store for memories from the live conversation.\nRetrieve RAG Chunks: A Postgres node searches the rag_store for memories from the initial bootstrapped knowledge base.\nMerge1: A Merge node combines the results from both retrieval steps into a single list.\nRAG Context consolidator: A Code node takes the merged list, removes any duplicate memories, and formats the unique results into a single, clean block of text.\nFormat History for AI: A Code node takes the consolidated text and wraps it in a standard { role: 'system', content: '...' } object, ready for the final prompt.\nPhase 5: Final Prompt Assembly & AI Call\nGet Recent history: (Runs in parallel to the RAG path) A Postgres node queries the conversation_history table for the last 6 turns of the conversation.\nFormat Recent History: A Code node formats these turns into the standard OpenAI message format.\nFormat Current Input: A Code node formats the user's current message into the standard format.\nMerge: This is the final assembly point. A Merge node combines the three streams of context:\nInput 1: The RAG context (from Format History for AI).\nInput 2: The recent conversational history (from Format Recent History).\nInput 3: The user's current message (from Format Current Input).\nBuild OpenAI Payload1: A sophisticated Code node takes the fully merged data. It intelligently selects the correct system prompt (persona), assembles the final message array in the correct order (system prompt, RAG context, history, user message), and builds the complete JSON payload for the AI.\nHTTP Request1: Sends the final payload to the OpenAI Chat Completions API.\nPhase 6: Response and Finalization\nCode1: A Code node parses the response from OpenAI, extracts the AI's reply, and performs cleaning and truncation. It also checks for any status messages from the background Auto-Commit process and appends them to the reply.\nPostgres2 (Save AI Reply): Saves the AI's generated response back to the conversation_history table.\nRespond to Webhook2: Sends the final, clean reply back to the Chat 8 UI, completing the cycle.",
+        "height": 80,
+        "width": 580
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -540,
+        2140
+      ],
+      "id": "7e801d39-a7c3-4a57-bb9b-de87f4fd983c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT role, content\nFROM conversation_history\nWHERE session_id = $1\nORDER BY created_at DESC\nLIMIT 6; -- Fetch more (e.g., 3 user, 3 AI) to ensure we get a few full turns",
+        "options": {
+          "queryReplacement": "={{ [$json.session_Id] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        500,
+        2645
+      ],
+      "id": "d52b0ff0-5bab-4986-818f-88d6ddcf3ce1",
+      "name": "Get Recent history",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code Node: Format Recent History\n// Input: items from \"Get Recent History\" node (array of {role, content} objects, newest first)\n// Output: A single item containing a 'recent_history' array, formatted for OpenAI (oldest first)\n\nconst inputItems = $input.all(); // Get all input items (each is a row from DB)\nlet formattedHistory = [];\n\n// Check if there are any input items\nif (inputItems.length > 0) {\n    // Extract .json from each item to get the actual data rows\n    const historyRecords = inputItems.map(item => item.json); \n\n    if (historyRecords && historyRecords.length > 0) {\n      // The history from DB is newest first (ORDER BY created_at DESC), \n      // so reverse it to get oldest first for the OpenAI prompt\n      formattedHistory = historyRecords.reverse().map(record => {\n        let roleToUse = 'unknown';\n        if (typeof record.role === 'string') {\n            const dbRole = record.role.toLowerCase();\n            if (dbRole === 'user') {\n                roleToUse = 'user';\n            } else if (dbRole === 'assistant' || dbRole === 'ai' || dbRole === 'model') {\n                roleToUse = 'assistant';\n            } else {\n                console.warn(`Format Recent History: Unknown role '${dbRole}' found, mapping to 'user'. Content: ${(record.content || \"\").substring(0,50)}`);\n                roleToUse = 'user'; // Fallback for unknown roles\n            }\n        } else {\n             console.warn(`Format Recent History: Missing or invalid role for record. Defaulting to 'user'. Record:`, record);\n             roleToUse = 'user';\n        }\n        const content = (typeof record.content === 'string') ? record.content : '';\n        \n        return {\n          role: roleToUse, \n          content: content\n        };\n      });\n    }\n}\n\n// Output a single item, with the formatted history array in a property\nreturn formattedHistory.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        2645
+      ],
+      "id": "48a35770-2e46-4c1c-a8c6-9b2b0fdde06a",
+      "name": "Format Recent History"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "conversation_history",
+          "mode": "list",
+          "cachedResultName": "conversation_history"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "session_id": "={{ $json.session_Id }}",
+            "role": "user",
+            "content": "={{ $json.chatInput }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role",
+              "displayName": "role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content",
+              "displayName": "content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1040,
+        2195
+      ],
+      "id": "291106dc-54dc-4aca-b2a8-de12e8cd5f6c",
+      "name": "Save User Message to History",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ecc57f20-7f83-4ed7-bc40-a63bf0b318b7",
+              "name": "session_Id",
+              "value": "={{ $('Get Session ID & Input').item.json.session_Id }}",
+              "type": "string"
+            },
+            {
+              "id": "1454ec7a-35ff-4bf1-aaf6-0bd559c6ddca",
+              "name": "chatInput",
+              "value": "={{ $('Get Session ID & Input').item.json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "e45f0fda-84cf-43e7-94ff-41ed896ce7e8",
+              "name": "=imageData",
+              "value": "={{ $(\"Get Session ID & Input\").item.json.imageData }}",
+              "type": "string"
+            },
+            {
+              "id": "09c1b52a-2cf0-4101-8a06-8ae66e1d8ea9",
+              "name": "rag_session_Id",
+              "value": "={{ $('Get Session ID & Input').item.json.rag_session_Id }}",
+              "type": "string"
+            },
+            {
+              "id": "5c53893f-4d94-4559-bef2-dc3123f2ae94",
+              "name": "project_Id",
+              "value": "={{ $('Get Session ID & Input').item.json.project_Id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -820,
+        2195
+      ],
+      "id": "b5020c49-a453-4b3f-be07-cfdfc9c3bb29",
+      "name": "Preserve Current Inputs"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b6a2f6aa-4b9d-4a9e-b0e3-6e1e57e7f4f1",
+              "name": "autoCommitEnabled",
+              "value": "true",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -600,
+        2170
+      ],
+      "id": "8d7cf264-eb0f-43c0-80b5-95488a9a6615",
+      "name": "Config: Auto-Commit Enabled"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9b2a5e2c-30f2-4e2e-9e0d-7fbf5c7b8bd1",
+              "leftValue": "={{ $json.chatInput }}",
+              "rightValue": "^\\s*remember\\b",
+              "operator": {
+                "type": "string",
+                "operation": "regex",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "f4d0a1b2-5e6f-4a7b-8c9d-1e2f3a4b5c6d",
+              "leftValue": "={{ $('Config: Auto-Commit Enabled').first().json.autoCommitEnabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -380,
+        2170
+      ],
+      "id": "b9de8a33-ec9b-4504-afd6-8918aa70dc20",
+      "name": "If Remember Intent"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://mhcmike.app.n8n.cloud/webhook/6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { chat_session_id: $('Preserve Current Inputs').first().json.session_Id, rag_session_id: $('Preserve Current Inputs').first().json.rag_session_Id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        2170
+      ],
+      "id": "c26737af-313c-4bee-b386-a8be5e621b2f",
+      "name": "Auto Commit via Webhook"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "conversation_history",
+          "mode": "list",
+          "cachedResultName": "conversation_history"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "session_id": "={{ $('Preserve Current Inputs').first().json.session_Id }}",
+            "role": "'assistant'",
+            "content": "={{ $json.reply }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role",
+              "displayName": "role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content",
+              "displayName": "content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1820,
+        2245
+      ],
+      "id": "b4b51311-4c53-4bc4-848a-2da7810c87b0",
+      "name": "Postgres2 (Save AI Reply)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        940,
+        2445
+      ],
+      "id": "ea8660a4-9f7d-42ae-9a99-dfc7d69488f5",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all items from all inputs\nconst allItems = $input.all();\n\n// Gracefully handle cases where one or both searches return no results.\nif (allItems.length === 0) {\n  return [{ json: { combined_rag_context: \"No relevant context was found in the knowledge base.\" } }];\n}\n\n// Use a Set to automatically handle duplicates\nconst uniqueContent = new Set();\nallItems.forEach(item => {\n  if (item.json.original_content) {\n    uniqueContent.add(item.json.original_content);\n  }\n});\n\n// Join the unique snippets together\nconst combinedText = Array.from(uniqueContent).join('\\n---\\n');\n\nreturn [{\n  json: {\n    combined_rag_context: combinedText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        2370
+      ],
+      "id": "c947ecd6-3f30-455f-8986-b6c3e2b59e2a",
+      "name": "RAG Context consolidator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The incoming data from the webhook has the user's text in the 'chatInput' field.\nconst userMessage = $input.item.json.chatInput;\n\n// Check if the user's message was successfully found.\nif (userMessage === undefined) {\n  // If not found, log the incoming data for debugging and throw a clear error.\n  console.log(\"ERROR: Could not find 'chatInput' in the input data:\", JSON.stringify($input.item, null, 2));\n  throw new Error(\"The user's message (chatInput) was not found in the input from the webhook.\");\n}\n\n// If the message is found, return it in the standard format for the chat model.\nreturn [{\n  json: {\n    role: 'user',\n    content: userMessage\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        1995
+      ],
+      "id": "4a0955b8-ce0c-43c8-b3f6-94c5c222f61c",
+      "name": "Format Current Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Configuration ---\nconst OPENAI_MODEL_NAME = 'gpt-5';\n\n// Minimal, safe persona handling: prefer explicit system_prompt_content from the webhook;\n// otherwise allow a small, hard-coded allowlist via persona_key; else default to 'bob'.\nconst PERSONAS = {\n  bob: `You are Bob, a helpful and knowledgeable AI assistant for Mike Holland. Your goal is to provide accurate and relevant answers.\n\nMemory & Privacy Policy (for this project UI):\n- You ARE allowed to remember non-sensitive project-related details the user asks you to remember (e.g., addresses, codes, preferences) for use within this project.\n- When the user says \"remember\" or similar, acknowledge positively and briefly restate the fact.\n- Clarify, only when relevant, that permanent persistence across restarts requires pressing the \"Commit to Memory\" button in the UI. Until then, you'll remember it in this session.\n- If the user explicitly marks something as private/sensitive (e.g., SSN, passwords), decline to store and suggest safer alternatives.\n\nAnswering Guidance:\n1. Prioritize the Knowledge Base: First, check the provided context from the knowledge base. If it directly answers the user's question, use it.\n2. Use General Knowledge if the KB lacks details.\n3. Be Conversational and concise; no need to mention internal mechanics unless helpful.\n4. Maintain Persona: A confident, direct \"Badda Boom Badda Bing\" style.`,\n  coach: `You are a supportive coach. Be encouraging, concise, and practical. Offer a brief plan with up to three steps and ask at most one clarifying question when essential.`,\n  pm: `You are a pragmatic project manager. Be structured, risk-aware, and end with a short list of next steps and owners when applicable.`\n};\n\nfunction pickSystemPrompt() {\n  try {\n    const body = $('Webhook1').first()?.json?.body || {};\n    const direct = (typeof body.system_prompt_content === 'string') ? body.system_prompt_content.trim() : '';\n    if (direct) return direct;\n    const key = (body.persona_key || '').toString().toLowerCase();\n    if (PERSONAS[key]) return PERSONAS[key];\n  } catch (e) { /* fall through to default */ }\n  return PERSONAS.bob;\n}\n\nconst SYSTEM_PROMPT_CONTENT = pickSystemPrompt();\n\n// --- Main Logic ---\n// 1. Get the user's message and any RAG context from the previous step.\nconst incomingItems = $input.all().map(item => item.json);\n\n// 2. Separate the RAG context from the user's actual message history.\nconst ragContext = incomingItems.filter(message => message.role === 'system').map(item => item.content).join('\\n\\n');\nconst messageHistory = incomingItems.filter(message => message.role !== 'system');\n\n// 3. Build the final array of messages for the API call.\nconst finalMessages = [];\n\n// 4. ALWAYS start with our main system prompt.\nlet finalSystemPrompt = SYSTEM_PROMPT_CONTENT;\n\n// 5. If RAG context was found, append it to the system prompt.\nif (ragContext) {\n  finalSystemPrompt += `\\n\\n--- Relevant Knowledge Base Context ---\\n${ragContext}`;\n  console.log('RAG context found and appended to system prompt.');\n} else {\n  console.log('No RAG context found. Using default or selected persona prompt.');\n}\n\n// Add the complete system prompt as the first message.\nfinalMessages.push({ role: 'system', content: finalSystemPrompt });\n\n// Add the rest of the message history (the user's actual conversation).\nfinalMessages.push(...messageHistory);\n\n// 6. Build the final payload object.\nconst openAIPayload = { model: OPENAI_MODEL_NAME, messages: finalMessages };\nconsole.log('Final OpenAI Payload to be sent:', JSON.stringify(openAIPayload, null, 2));\n\n// 7. Return the final payload.\nreturn [{ json: openAIPayload }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        2445
+      ],
+      "id": "1fdce569-18ca-4b0b-9470-db485a729107",
+      "name": "Build OpenAI Payload1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        -1260,
+        1995
+      ],
+      "id": "f7f7dbb4-d3d9-4c61-8a8e-cd76920e595e",
+      "name": "Pre-flight Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4b3cfa86-fdf5-4632-bbd3-84bb73ffb9bf",
+              "leftValue": "={{ $json.rag_session_Id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -600,
+        2545
+      ],
+      "id": "f80eaac2-3a3e-4a34-9849-5ba6f5fd62a1",
+      "name": "If Rag is Active"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  original_content,\n  role,\n  embedding <=> $3::vector AS distance\nFROM\n  rag_store\nWHERE\n  project_id = $1 AND session_id = $2\nORDER BY\n  distance ASC\nLIMIT 3",
+        "options": {
+          "queryReplacement": "=[\n  {{ $('Webhook1').first().json.body.project_id }},\n  {{ $('Format Data for Vector Search').first().json.current_session_id_for_search }},\n  {{ $('Format Data for Vector Search').first().json.query_embedding_for_pg }}\n]"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        60,
+        2270
+      ],
+      "id": "5bb5a8eb-3c02-44c8-a4b6-61861441b930",
+      "name": "Retrieve Committed Memory",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  original_content,\n  role,\n  embedding <=> $3::vector AS distance\nFROM\n  rag_store\nWHERE\n  project_id = $1 AND session_id = $2\nORDER BY\n  distance ASC\nLIMIT 3",
+        "options": {
+          "queryReplacement": "=[\n  {{ $('Preserve Current Inputs').first().json.project_Id }},\n  {{ $('Format Data for Vector Search').first().json.current_session_id_for_search }},\n  {{ $('Format Data for Vector Search').first().json.query_embedding_for_pg }}\n]"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        60,
+        2470
+      ],
+      "id": "c25393dc-ddcf-4b33-99c9-dbf34be22669",
+      "name": "Retrieve RAG Chunks",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        280,
+        2370
+      ],
+      "id": "d319da2f-c872-48a7-8a5c-101a87a182dc",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        1820,
+        2445
+      ],
+      "id": "1fc576c0-fd5d-48b6-8ca0-d7bf037d4fe3",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "path": "3c92075f-a856-439a-b70d-73f3c847f8fa",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1480,
+        2070
+      ],
+      "id": "7490ab90-3a64-48c5-a53a-80109c76df0e",
+      "name": "Webhook1",
+      "webhookId": "58378ca2-9b32-4dfc-9e25-88b4fdce6ed3",
+      "options": {
+        "allowedOrigins": "*",
+        "responseHeaders": {
+          "entries": [
+            {
+              "name": "Access-Control-Allow-Methods",
+              "value": "GET, POST, OPTIONS"
+            },
+            {
+              "name": "Access-Control-Allow-Headers",
+              "value": "Content-Type, Authorization"
+            },
+            {
+              "name": "Access-Control-Allow-Origin",
+              "value": "*"
+            }
+          ]
+        }
+      },
+      "notes": "update 2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"text-embedding-ada-002\", \"input\": $json.chunk_text_for_embedding } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -380,
+        1175
+      ],
+      "id": "826a50fe-d718-4aab-9211-7e64f64f90d0",
+      "name": "Create Embedding1",
+      "executeOnce": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "jSjNufUyszBKKWwb",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Code Node: Format Vector for Postgres\n// Outputting VECTOR STRING for n8n \"Execute Query\" operation\n\nconst inputJson = $input.item.json;\nlet vectorStringForDb = '[]'; // Default\nconst embeddingVectorArray = inputJson.embedding_vector_from_api;\n\nif (embeddingVectorArray && Array.isArray(embeddingVectorArray) && embeddingVectorArray.length > 0) {\n    // Create the string '[-0.01,0.02,...]'\n    vectorStringForDb = JSON.stringify(embeddingVectorArray).trim(); \n} else {\n    console.error(\"Format Vector for PG: embedding_vector_from_api was problematic. Using default '[]'. Chunk: \" + (inputJson.original_content_for_db || \"\").substring(0,30) );\n}\n\nconst outputData = {\n  session_id_for_insert: inputJson.session_id_for_insert,\n  original_content_for_db: inputJson.original_content_for_db,\n  role_for_final_insert: inputJson.role_for_db || inputJson['role-for-db'] || 'unknown',\n  embedding_vector_string_for_db: vectorStringForDb // Outputting the string\n};\n\nif (!outputData.session_id_for_insert || !outputData.original_content_for_db || !outputData.role_for_final_insert) {\n    console.error(\"Format Vector for PG: CRITICAL - Missing required fields. Data:\", outputData);\n    return null; \n}\n\nreturn outputData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        1100
+      ],
+      "id": "72ffda6e-951c-4c59-8ef7-8fbcf6d483ee",
+      "name": "Format Vector for Postgres1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO rag_store (project_id, session_id, original_content, role, embedding) VALUES ($1, $2, $3, $4, $5);",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [ $item(0).$node[\"Create Project Entry1\"].json[\"project_id\"], $item(0).$node[\"Create Project Entry1\"].json[\"rag_session_id\"], $json.original_content_for_db, $json.role_for_final_insert, $json.embedding_vector_string_for_db ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        500,
+        1100
+      ],
+      "id": "a20fd1dd-5ef6-41df-b6ad-fcdf56016237",
+      "name": "Insert Embedding to Xata1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "df1df400-e07f-4834-a324-6f644c650e0d",
+              "name": "session_id_for_insert",
+              "value": "={{ $json.session_id_for_db }}",
+              "type": "string"
+            },
+            {
+              "id": "98488e14-449e-43ab-8f11-7bbaf90fb2db",
+              "name": "original_content_for_db",
+              "value": "={{ $json.chunk_text_for_embedding }}",
+              "type": "string"
+            },
+            {
+              "id": "605e03fe-51ff-434d-89a1-1b8c71126cc7",
+              "name": "role-for-db",
+              "value": "={{ ($json.original_role_for_db === 'model' || $json.original_role_for_db === 'assistant') ? 'assistant' : 'user' }}",
+              "type": "string"
+            },
+            {
+              "id": "21b390bb-4fa5-461d-a3e6-613ff3f5e823",
+              "name": "embedding_vector_from_api",
+              "value": "={{ $json.data[0].embedding }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        60,
+        1100
+      ],
+      "id": "e72122d0-d463-442d-9b6b-e7837794470c",
+      "name": "Prepare for DB1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Webhook2').item.json.body.jsonUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1040,
+        1100
+      ],
+      "id": "39311b5b-089f-43b8-a6de-13128891340a",
+      "name": "HTTP Request GCS Fetch1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Intelligent Chunking Script v3 (with Debugging) ---\n\n// This line now gets the session_id from the node that created the project in the database.\nconst BATCH_SESSION_ID = $('Webhook2').item.json.body.projectName;\nconst MAX_CHUNK_SIZE_CHARS = 6000; // Safety limit (~1500 tokens)\nconst documentText = $json.data;\nconst finalItems = [];\n\n// Split the document by our manual break first.\nconst primaryChunks = documentText.split('---CHUNK_BREAK---');\n\nfor (const primaryChunk of primaryChunks) {\n    let currentChunk = primaryChunk.trim();\n    if (!currentChunk) continue;\n\n    // If a chunk is already small enough, process it.\n    if (currentChunk.length <= MAX_CHUNK_SIZE_CHARS) {\n        // --- DEBUGGING ---\n        console.log(`[OK] Chunk size: ${currentChunk.length}`);\n        finalItems.push({\n            json: {\n                chunk_text_for_embedding: currentChunk,\n                session_id_for_db: BATCH_SESSION_ID\n            }\n        });\n        continue;\n    }\n\n    // If a chunk is TOO LARGE, we must split it further.\n    // --- DEBUGGING ---\n    console.log(`[LARGE CHUNK DETECTED] Splitting chunk of size: ${currentChunk.length}`);\n    let tempChunk = \"\";\n    const sentences = currentChunk.split(/(?<=[.?!])\\s+/); // Split by sentences\n\n    for (const sentence of sentences) {\n        if ((tempChunk.length + sentence.length + 1) > MAX_CHUNK_SIZE_CHARS) {\n            // --- DEBUGGING ---\n            console.log(`[SUB-CHUNK CREATED] Size: ${tempChunk.length}`);\n            finalItems.push({\n                json: {\n                    chunk_text_for_embedding: tempChunk,\n                    session_id_for_db: BATCH_SESSION_ID\n                }\n            });\n            tempChunk = sentence;\n        } else {\n            tempChunk += (tempChunk ? \" \" : \"\") + sentence;\n        }\n    }\n    // Add the last remaining part\n    if (tempChunk) {\n        // --- DEBUGGING ---\n        console.log(`[FINAL SUB-CHUNK] Size: ${tempChunk.length}`);\n        finalItems.push({\n            json: {\n                chunk_text_for_embedding: tempChunk,\n                session_id_for_db: BATCH_SESSION_ID\n            }\n        });\n    }\n}\n\nreturn finalItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -820,
+        1100
+      ],
+      "id": "7294cce3-005d-4fdc-ba80-055aa8c8ab90",
+      "name": "Chunk Code1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        -160,
+        1100
+      ],
+      "id": "a95b909d-b7e6-4f47-bc19-1dd392350654",
+      "name": "Merge Embedding with Chunk Data1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "95b4011b-5ede-4775-a952-bd6963670ce9",
+              "leftValue": "={{ $json.chunk_text_for_embedding }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        -600,
+        1100
+      ],
+      "id": "bc8261b2-bee0-4b19-a904-e673d5004236",
+      "name": "Filter1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH generated_ids AS (\n    SELECT\n        (EXTRACT(EPOCH FROM NOW())::BIGINT)::text AS project_id,\n        'chat_' || (EXTRACT(EPOCH FROM NOW())::BIGINT) AS chat_session_id,\n        'rag_' || REPLACE('{{$json.body.projectName}}', ' ', '_') || '_' || (EXTRACT(EPOCH FROM NOW())::BIGINT) AS rag_session_id\n),\ninserted_project AS (\n    INSERT INTO project_contexts (\n        project_name,\n        session_id,\n        chat_session_id,\n        rag_session_id,\n        status,\n        description,\n        notes,\n        lead_contact\n    )\n    SELECT\n        '{{$json.body.projectName}}',\n        g.chat_session_id,\n        g.chat_session_id,\n        g.rag_session_id,\n        'Active',\n        'Project created from Indexed URL',\n        'Source URL: {{$json.body.jsonUrl}}',\n        'Project created from URL'\n    FROM generated_ids g\n)\nSELECT project_id, chat_session_id, rag_session_id FROM generated_ids;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1260,
+        1100
+      ],
+      "id": "ef722cf6-92c1-45d9-996b-8faab137b921",
+      "name": "Create Project Entry1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n  ({\n    status: 'success',\n    project_id: $('Create Project Entry1').first().json.project_id,\n    session_id: $('Create Project Entry1').first().json.session_id,\n    rag_session_id: $('Create Project Entry1').first().json.rag_session_id\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        1100
+      ],
+      "id": "1384d1e5-a70a-43af-8981-f3e6e4e56243",
+      "name": "Prepare Final Response1",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: RAG Indexing Workflow\n\n\nWorkflow Name: RAG Indexing Workflow for Documentation\nSource File: RAG_Indexing_Workflow_for_Documentation.json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the dedicated data pipeline for bootstrapping a new project with an existing knowledge base. Its purpose is to receive a URL to a JSON file and a new project name from the UI, create the necessary project records in the database, and then systematically process the contents of the JSON file. It chunks the text, generates vector embeddings for each chunk, and saves them to the long-term memory store (rag_store), permanently associating them with the newly created project.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...303639ed...) listens for POST requests from the Chat 8 UI's \"Create from URL\" feature.\nDatabase: It interacts with both the project_contexts table (to create the new project) and the rag_store table (to save the indexed memories).\nExternal Services: It makes calls to Google Cloud Storage (GCS) to fetch the source JSON and to the OpenAI API to generate embeddings.\nLogic: The workflow is a sequential pipeline: create the project, fetch the data, chunk it, create embeddings, and save everything to the database.\n3. Step-by-Step Data Flow\nThe workflow executes in a clear, linear sequence:\nWebhook2: The workflow is triggered when the user submits a JSON URL and a new project name from the UI. The payload contains { \"projectName\": \"...\", \"jsonUrl\": \"...\" }.\nCreate Project Entry1: A Postgres node immediately executes a complex SQL query. This single query is responsible for:\nGenerating a new, unique project_id (numeric), chat_session_id, and rag_session_id.\nInserting a new record into the project_contexts table with these new IDs and the provided project name.\nReturning the newly generated IDs for use in subsequent steps.\nHTTP Request GCS Fetch1: An HTTPRequest node takes the jsonUrl from the initial webhook and fetches the raw text content of the JSON file from Google Cloud Storage.\nChunk Code1: A sophisticated Code node takes the raw text from the file. It intelligently splits the text into smaller, manageable chunks suitable for embedding, ensuring no chunk exceeds a maximum character limit. It outputs a list of items, each containing a text chunk.\nFilter1: A simple Filter node ensures that no empty chunks proceed, preventing wasted API calls.\nCreate Embedding1: (Runs for each chunk) An HTTPRequest node takes each text chunk and sends it to the OpenAI embeddings API (text-embedding-ada-002) to generate a vector embedding.\nMerge Embedding with Chunk Data1: A Merge node combines the original chunk data with the newly generated embedding vector from the previous step.\nPrepare for DB1: A Set node takes the merged data and restructures it, creating clean fields (session_id_for_insert, original_content_for_db, etc.) ready for the next step.\nFormat Vector for Postgres1: A Code node takes the embedding vector (which is a JavaScript array) and converts it into the specific string format (e.g., \"[0.1, 0.2, ...]\") required by the pgvector database type.\nInsert Embedding to Xata1: (Runs for each chunk) This is the final, critical database operation. A Postgres node takes the fully prepared data for each chunk and executes an INSERT query to save it to the rag_store table. It correctly links each memory to the project_id and rag_session_id that were generated in Step 2.\nPrepare Final Response1: After all chunks have been successfully inserted, a Set node runs once to format a clean success message.\nRespond to Webhook3: The final Respond to Webhook node sends the success object (containing the new project_id, session_id, and rag_session_id) back to the UI, signaling that the project has been created and indexed, and a new chat session can begin.",
+        "height": 80,
+        "width": 620
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        1300
+      ],
+      "id": "9334bd36-a585-44ee-ae28-86d427607f7c",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"project_id\": \"{{$item(0).$node[\"Create Project Entry1\"].json[\"project_id\"]}}\",\n  \"session_id\": \"{{$item(0).$node[\"Create Project Entry1\"].json[\"chat_session_id\"]}}\",\n  \"rag_session_id\": \"{{$item(0).$node[\"Create Project Entry1\"].json[\"rag_session_id\"]}}\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        940,
+        1100
+      ],
+      "id": "8a588ebd-6430-4d44-a6e4-c2aede34d2e7",
+      "name": "Respond to Webhook3"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "303639ed-a3e2-4eae-b406-16e1c6200a81",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "http://127.0.0.1:5500"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "OPTIONS and POST"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1480,
+        1100
+      ],
+      "id": "0e91ac73-37fb-4aab-8241-6201cc077459",
+      "name": "Webhook2",
+      "webhookId": "303639ed-a3e2-4eae-b406-16e1c6200a81"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_contexts (project_name, status, chat_session_id, rag_session_id)\nVALUES ($1, 'New', $2, $3)\nRETURNING xata_id AS project_id, chat_session_id AS thread_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.projectName, $json.chat_session_id, $json.rag_session_id ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -600,
+        840
+      ],
+      "id": "d527e34b-0c45-4622-9e15-eef23d710bb8",
+      "name": "Postgres1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    project_name, \n    chat_session_id, \n    rag_session_id, \n    xata_id \nFROM \n    project_contexts \nORDER BY \n    xata_createdat DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1260,
+        740
+      ],
+      "id": "3c91e96c-5a6f-48c4-87a9-238b743ea70f",
+      "name": "Get Project List",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node receives the new project name and generates unique IDs.\n\nconst body = $json.body;\n\n// 1. Validate the input from the frontend.\nif (!body.projectName || typeof body.projectName !== 'string') {\n  throw new Error(\"The 'projectName' field is missing or is not a string in the webhook body.\");\n}\n\n// 2. Generate unique IDs for the chat session and the RAG session.\nconst timestamp = Date.now();\nconst newChatId = `chat_${body.projectName.replace(/\\s+/g, '_')}_${timestamp}`;\nconst newRagId = `rag_${body.projectName.replace(/\\s+/g, '_')}_${timestamp}`;\n\n// 3. Pass all the necessary data to the next node.\nreturn [{\n  json: {\n    projectName: body.projectName,\n    chat_session_id: newChatId,\n    rag_session_id: newRagId\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -820,
+        840
+      ],
+      "id": "db8db82d-1ada-40ac-a0d7-363e63a1e9df",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fbb86eac-b086-4e9d-90a6-bce32d094885",
+              "leftValue": "={{ $items.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1040,
+        740
+      ],
+      "id": "b92be254-0e44-47e7-ae30-b781bd8c009a",
+      "name": "If1",
+      "executeOnce": false,
+      "alwaysOutputData": false,
+      "retryOnFail": false,
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        -600,
+        640
+      ],
+      "id": "309ecc61-b659-42b5-a202-95a1c8cce649",
+      "name": "Respond to Webhook4"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ chat_session_id: $('Code2').item.json.chat_session_id, rag_session_id: $('Code2').item.json.rag_session_id }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        -380,
+        840
+      ],
+      "id": "798c9398-3fe3-42ec-b78e-2afdbac0b1ec",
+      "name": "Respond to Webhook5"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "a61a290c-d8e5-4c04-980a-4ebb415a21e4",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1480,
+        740
+      ],
+      "id": "d0c6b09c-2c47-47d5-8e56-61e2276ae3c5",
+      "name": "Webhook3",
+      "webhookId": "a61a290c-d8e5-4c04-980a-4ebb415a21e4",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: Setup Workflow - Project Launcher\n\n\nWorkflow Name: Setup Workflow: Project Launcher for Documentation\nSource File: Setup_Workflow__Project_Launcher_for_Documentation.json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the primary \"receptionist\" and setup engine for the Chat 8 UI. It is a dual-function workflow that automates both the creation of new, simple projects and the retrieval of the complete list of existing projects. Its core purpose is to manage the project_contexts table, ensuring each project has a unique set of identifiers before handing control back to the UI.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...a61a290c...) listens for POST requests from the Chat 8 UI's initial launcher screen.\nDatabase: It interacts exclusively with the project_contexts table in the Postgres database to create new project records and retrieve the full project list.\nLogic: The workflow uses an If node to act as a switch, directing the incoming request down one of two distinct paths based on an action property in the request body.\n3. Step-by-Step Data Flow\nThe workflow begins with a single entry point and immediately branches based on the user's intent.\nWebhook3: The workflow is triggered by a POST request from the UI. The payload contains a JSON body with an action key, which will be either create_project or list_projects.\nBranch A: \"List Existing Projects\"\nThis is the True path of the If1 node.\nGet Project List: A Postgres node executes a SELECT query to retrieve the project_name, chat_session_id, rag_session_id, and xata_id for all records in the project_contexts table.\nIf1: The workflow logic for this branch is slightly counter-intuitive. The If node checks if the result of the Get Project List query has more than 0 items. If True, it proceeds down this \"List Projects\" path.\nCode3: A Code node takes the list of projects from the database and transforms it to match the data contract expected by the UI, ensuring all necessary keys (project_name, session_id, project_id, rag_session_id) are present.\nRespond to Webhook4: The final Respond to Webhook node sends the formatted list of projects back to the UI, which then uses it to populate the project selection dropdown.\nBranch B: \"Create New Project\"\nThis is the False path of the If1 node.\nCode2: A Code node receives the projectName from the webhook. It generates a new, unique chat_session_id and rag_session_id based on the project name and the current timestamp.\nPostgres1: This Postgres node executes an INSERT query, using the data from the Code2 node to create a new record in the project_contexts table. It uses RETURNING xata_id to get the permanent project ID back from the database.\nRespond to Webhook5: The final Respond to Webhook node sends a success response back to the UI, providing it with the newly created chat_session_id and rag_session_id so it can initialize the new chat session.",
+        "height": 80,
+        "width": 720
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        720
+      ],
+      "id": "f0cfe2f5-535c-4300-972d-1e47d99f5b94",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all items from the previous node's output\nconst allInputItems = $input.all();\n\n// Use .map() to transform each item into the desired format\nconst allItems = allInputItems.map(item => {\n  return {\n    project_name: item.json.project_name,\n    session_id: item.json.chat_session_id,\n    project_id: item.json.xata_id,\n    rag_session_id: item.json.rag_session_id // <-- ADD THIS LINE\n  };\n});\n\n// Return the final, correctly structured object\nreturn {\n  json: {\n    projects: allItems\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -820,
+        640
+      ],
+      "id": "219df285-0247-4d18-b208-0bd8270a75d0",
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM conversation_history\nWHERE\n  session_id = $1\n  AND id > $2;",
+        "options": {
+          "queryReplacement": "={{ [ $('Trigger: Receive Session ID').first().json.body.chat_session_id, $('Set: Watermark Value').first().json.highWaterMark ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -600,
+        280
+      ],
+      "id": "1c8372cd-a25f-4843-a991-cbb1abe37dab",
+      "name": "DB: Get Conversation History",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $('DB: Get Conversation History').all();\nlet assembledTranscript = \"\";\n\nfor (const item of items) {\n  // Only process items that have a role and content\n  if (item.json.role && item.json.content) {\n    const role = item.json.role;\n    const content = item.json.content;\n    const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);\n    assembledTranscript += `${formattedRole}: ${content}\\n`;\n  }\n}\n\n// If empty, return benign output; downstream can decide to no-op.\nif (assembledTranscript.trim() === \"\") {\n  return [{ json: { assembledTranscript: \"\" } }];\n}\n\nreturn [{ json: { assembledTranscript: assembledTranscript.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        280
+      ],
+      "id": "aee208d2-89e1-4d85-b008-0832b57e1a82",
+      "name": "Format: Assemble Transcript",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the transcript from the previous node\nconst transcript = $input.item.json.assembledTranscript;\n\n// --- CORRECTED PROMPT ---\n// This new prompt is more lenient and will capture more information.\nconst system_prompt = `You are a meticulous data extraction engine. Your sole purpose is to convert a conversation transcript into a structured JSON object containing a list of key informational statements.\n\nRules:\n- Your output MUST be a JSON object with a single key: \"facts\".\n- The \"facts\" key must contain an array of strings.\n- Each string should be a key piece of information, a specific detail, or a factual statement.\n- Extract informational content from both the User and the Assistant.\n- IGNORE simple pleasantries (hello, thanks) and questions that do not contain information.\n- If no new information is found, the \"facts\" array MUST be empty: [].`;\n\n// Build the complete JSON body for the OpenAI API call\nconst requestBody = {\n  \"model\": \"gpt-4o\",\n  \"temperature\": 0.1,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": system_prompt\n    },\n    {\n      \"role\": \"user\",\n      \"content\": transcript\n    }\n  ]\n};\n\n// Return the entire object for the next node\nreturn requestBody;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        280
+      ],
+      "id": "5518838e-244b-4eb9-864a-157da33cf8b0",
+      "name": "Build: OpenAI Request Body"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "=application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        280
+      ],
+      "id": "40dd5068-1721-44da-9153-9582c3395f81",
+      "name": "Execute: OpenAI API Call",
+      "credentials": {
+        "openAiApi": {
+          "id": "jSjNufUyszBKKWwb",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(\n  (SELECT last_processed_message_id FROM memory_commit_log WHERE session_id = $1),\n  0\n) as high_water_mark;",
+        "options": {
+          "queryReplacement": "={{ $('Trigger: Receive Session ID').first().json.body.chat_session_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1040,
+        280
+      ],
+      "id": "e0b73237-7c91-4c1b-886b-46a3bb536f92",
+      "name": "DB: Get High-Water Mark",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "28e6b89f-2ac1-420d-9774-231e6d7834c3",
+              "name": "highWaterMark",
+              "value": "={{ $json.high_water_mark ?? 0 }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -820,
+        280
+      ],
+      "id": "5227a98a-a9b7-4030-814a-070494eb6c2a",
+      "name": "Set: Watermark Value"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b2c6aead-ea59-4a6e-9101-e1f9541c8d8e",
+              "name": "summary_text",
+              "value": "={{ $json.choices[0].message.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        280
+      ],
+      "id": "a2e8a181-f2b2-46b0-970d-34305b251aba",
+      "name": "Set: Extracted Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count number of distilled facts for commit status / toast.\nconst s = $('Set: Extracted Summary').first().json.summary_text;\nlet count = 0;\ntry { const obj = JSON.parse(s); if (Array.isArray(obj.facts)) count = obj.facts.length; } catch (e) {}\nreturn { count };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        380
+      ],
+      "id": "a71638a4-2ba7-439e-b342-01a84a63b573",
+      "name": "Count Facts"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node takes the JSON string from the AI, extracts the facts,\n// and returns each fact as a separate item to be embedded.\n\n// Get the summary_text which contains a JSON string of facts.\nconst summaryJsonString = $input.item.json.summary_text;\n\n// Parse the string to get the actual JSON object.\nconst summaryObject = JSON.parse(summaryJsonString);\n\n// Get the array of facts from the object.\nconst factsArray = summaryObject.facts;\n\n// If there are no facts, return an empty array to stop the workflow.\nif (factsArray.length === 0) {\n  return [];\n}\n\n// Return each fact as a separate item, with the correct key.\nreturn factsArray.map(fact => {\n  return {\n    json: {\n      \"chunk_text_for_embedding\": fact\n    }\n  }\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        180
+      ],
+      "id": "abf72140-64dc-4d9a-a39e-e59169d88368",
+      "name": "Chunk: Distilled Summary"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO rag_store (project_id, session_id, original_content, role, embedding)\nVALUES ($1, $2, $3, $4, '{{ JSON.stringify($json.embedding) }}');",
+        "options": {
+          "queryReplacement": "={{ $json.project_id }},{{ $json.session_id }},{{ $json.original_content }},{{ $json.role }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1600,
+        180
+      ],
+      "id": "7c3de791-3f68-4585-a67e-5269085c9548",
+      "name": "DB: Insert Embedding1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO memory_commit_log (session_id, last_processed_message_id, processed_at)\nVALUES ($1, $2, NOW())\nON CONFLICT (session_id)\nDO UPDATE SET\n    last_processed_message_id = EXCLUDED.last_processed_message_id,\n    processed_at = NOW();",
+        "options": {
+          "queryReplacement": "={{ $('Trigger: Receive Session ID').first().json.body.chat_session_id }},{{ $('Calculate New High-Water Mark').first().json.new_high_water_mark }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1820,
+        180
+      ],
+      "id": "a576fdfd-c120-45ab-a7cd-6996d4361b9c",
+      "name": "DB: Update High-Water Mark",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71077881-f2db-46b6-8537-c6fece3d5296",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        280
+      ],
+      "id": "74923d18-de7c-43f1-9e4a-5089a485318d",
+      "name": "IF: New Messages Found?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node finds the highest 'id' from the incoming messages.\nconst items = $input.all();\nlet maxId = 0;\n\n// If there are no items, the watermark is 0.\nif (items.length === 0) {\n  return [{ json: { new_high_water_mark: maxId } }];\n}\n\n// Find the highest id in the list of messages.\nfor (const item of items) {\n  if (item.json.id > maxId) {\n    maxId = item.json.id;\n  }\n}\n\n// Return the single highest value.\nreturn [{ json: { new_high_water_mark: maxId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        280
+      ],
+      "id": "8e8cc5e8-1332-4213-a166-1c8d9574286e",
+      "name": "Calculate New High-Water Mark"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"text-embedding-3-small\", \"input\": \"{{ $json.chunk_text_for_embedding }}\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        180
+      ],
+      "id": "beeda67a-8abe-4b29-b870-72295e4bca78",
+      "name": "API: Create Embeddings (HTTP) node",
+      "credentials": {
+        "openAiApi": {
+          "id": "jSjNufUyszBKKWwb",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// This is the corrected final assembly. It pulls data from all necessary\n// previous nodes to create the complete payload for the database.\n\n// 1. Get the new embedding.\nconst embedding = $json.data[0].embedding;\n\n// 2. Get the summary text.\nconst summaryData = $('Set: Extracted Summary').first().json;\nconst summaryText = summaryData.summary_text;\n\n// 3. Get the project ID.\nconst projectData = $('Get Project ID').first().json;\nconst projectId = projectData.project_id;\n\n// 4. Get the RAG session ID to scope long-term memory writes.\nconst triggerData = $('Trigger: Receive Session ID').first().json;\nconst sessionId = triggerData.body.rag_session_id;\n\n// 5. Get the new high-water mark we just calculated.\nconst watermarkData = $('Calculate New High-Water Mark').first().json;\nconst newHighWaterMark = watermarkData.new_high_water_mark;\n\n// 6. Build the final, complete payload with EVERYTHING needed.\nconst finalPayload = {\n  project_id: projectId,\n  session_id: sessionId,\n  original_content: summaryText,\n  role: 'summary',\n  embedding: embedding,\n  new_high_water_mark: newHighWaterMark\n};\n\nreturn finalPayload;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        180
+      ],
+      "id": "ca056049-afc6-473f-aa35-bd61e415db0c",
+      "name": "Merge Embedding with Original Data"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT xata_id AS project_id FROM project_contexts WHERE chat_session_id = $1",
+        "options": {
+          "queryReplacement": "=[   {{ $('Trigger: Receive Session ID').first().json.body.chat_session_id }} ]"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1260,
+        280
+      ],
+      "id": "a5e55b82-2d0f-4395-8fa3-d98a641dd81c",
+      "name": "Get Project ID",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1480,
+        280
+      ],
+      "id": "a4dcf4fb-69a7-428a-a7ba-54ae87fd2734",
+      "name": "Trigger: Receive Session ID",
+      "webhookId": "6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c",
+      "options": {
+        "allowedOrigins": "*",
+        "responseHeaders": {
+          "entries": [
+            {
+              "name": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "name": "Access-Control-Allow-Methods",
+              "value": "POST, OPTIONS"
+            },
+            {
+              "name": "Access-Control-Allow-Headers",
+              "value": "Content-Type, Authorization"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: Context Distillation & Indexing\n\n\nWorkflow Name: System: Context Distillation & Indexing for Documentation\nSource File: System__Context_Distillation___Indexing_for_Documentation.json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the dedicated \"Commit to Memory\" function for the Chat 8 UI. Its purpose is to solve the problem of limited context windows in LLMs by creating a persistent, long-term memory store. It is triggered manually by the user, reads the recent, unprocessed conversation history for a given session, uses a powerful AI model to distill that conversation into a set of atomic facts, generates vector embeddings for those facts, and saves them to the rag_store database.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...6c1ce608...) listens for POST requests from the Chat 8 UI's \"Commit to Memory\" button.\nDatabase: It interacts with three key tables in the Postgres database: conversation_history (to read new messages), memory_commit_log (to track progress with a high-water mark), and rag_store (to save the final indexed memories).\nExternal Services: It makes two distinct calls to the OpenAI API: one to the Chat Completions endpoint for fact distillation and another to the Embeddings endpoint for vectorization.\nLogic: The workflow is a sequential data processing pipeline that includes a crucial \"high-water mark\" system to prevent duplicate processing of messages.\n3. Step-by-Step Data Flow\nThe workflow executes in a clear, linear sequence:\nTrigger: Receive Session ID: The workflow is triggered by a POST request from the UI. The payload contains the chat_session_id and rag_session_id for the current conversation.\nGet Project ID: A Postgres node takes the chat_session_id and queries the project_contexts table to find the associated permanent project_id.\nDB: Get High-Water Mark: A Postgres node queries the memory_commit_log table to find the ID of the last message that was processed for this chat_session_id. It uses a COALESCE function to safely default to 0 if no record exists (i.e., this is the first commit for the session).\nSet: Watermark Value: A Set node takes the high_water_mark from the previous step and prepares it for the next query.\nDB: Get Conversation History: A Postgres node queries the conversation_history table, fetching all messages for the current chat_session_id whose id is greater than the highWaterMark.\nCalculate New High-Water Mark: A Code node iterates through the messages retrieved in the previous step and finds the highest message id. This value will be saved at the end of the workflow.\nIF: New Messages Found?: An If node checks if any new messages were returned. If the count is zero, the workflow stops cleanly. If new messages exist, it proceeds.\nFormat: Assemble Transcript: A Code node takes the new messages and formats them into a clean, human-readable transcript string.\nBuild: OpenAI Request Body: A Code node constructs the full JSON payload for the fact-distillation call to the OpenAI API, including a detailed system prompt and the conversation transcript.\nExecute: OpenAI API Call: An HTTPRequest node sends the payload to the OpenAI Chat Completions API (gpt-4o).\nSet: Extracted Summary: A Set node parses the AI's response and extracts the JSON string containing the distilled facts.\nChunk: Distilled Summary: A Code node parses the JSON string of facts and splits them, outputting each individual fact as a separate item to be processed in the following steps.\nAPI: Create Embeddings (HTTP) node: (Runs for each fact) An HTTPRequest node takes each fact and calls the OpenAI Embeddings API (text-embedding-3-small) to generate its vector embedding.\nMerge Embedding with Original Data: A Code node (not a Merge node) runs to assemble the final, complete payload for the database, combining the project_id, session_id, the fact text, the role (summary), and the new embedding vector.\nDB: Insert Embedding1: (Runs for each fact) A Postgres node executes the INSERT query to save the complete record for each fact into the rag_store table.\nDB: Update High-Water Mark: The final database operation. A Postgres node performs an UPSERT on the memory_commit_log table, saving the new_high_water_mark calculated in Step 6. This ensures the next run will only process messages created after this point.\nCount Facts & Respond to Webhook6: A final Code node counts the number of facts committed, and the Respond to Webhook node sends a detailed success message (including a \"toast\" for the UI) back to the user, completing the cycle.",
+        "height": 80,
+        "width": 660
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        100
+      ],
+      "id": "49a03cc5-af5a-4b9b-8a84-852d52a988ca",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  status: 'success',\n  toast: `Committed ${$('Count Facts').first().json.count ?? 0} fact(s) to memory.`,\n  status_line: `Memory updated: project_id=${$('Get Project ID').first().json.project_id}, rag_session_id=${$('Trigger: Receive Session ID').first().json.body.rag_session_id}, new_chunks=${$('Count Facts').first().json.count ?? 0}.`,\n  chunks_committed: $('Count Facts').first().json.count ?? 0,\n  project_id: $('Get Project ID').first().json.project_id,\n  rag_session_id: $('Trigger: Receive Session ID').first().json.body.rag_session_id\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        2040,
+        180
+      ],
+      "id": "233fe82d-ebed-4db8-ac80-448ccb962ba8",
+      "name": "Respond to Webhook6"
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: Create Project Workflow\n\n\nWorkflow Name: Create Project Workflow (as inferred from context)\nSource File: Main_Chat_Workflow_for_Documentation (1).json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the dedicated backend process for creating a new, simple project. Its sole purpose is to receive a project name from the UI, ensure it doesn't already exist, create all the necessary records and IDs in the database, and return a success response to the UI so a new chat session can begin. It acts as a secure and robust entry point for Scenario 1.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...d0b91f11...) listens for POST requests from the Chat 8 UI.\nDatabase: It interacts exclusively with the project_contexts table in the Postgres database to check for duplicates and create new project records.\nLogic: The workflow follows a simple conditional path: if the project already exists, it fails gracefully; if not, it proceeds with creation.\n3. Step-by-Step Data Flow\nThe workflow executes in a clear, linear sequence:\nWebhook: The workflow is triggered when the user submits a new project name from the UI. The payload contains { \"projectName\": \"...\" }.\nCheck if Project Exists: A Postgres node immediately queries the project_contexts table to see if any record already has the provided projectName.\nIf (Project Exists?): An If node checks the result of the previous query.\nIf True (project exists): The workflow takes the True branch and immediately triggers the Respond to Webhook1 node, which sends a specific error message back to the UI, stopping the process.\nIf False (project is new): The workflow proceeds down the main False branch to create the project.\nCode (Prepare SQL Parameters): A Code node runs to prepare the data for the database INSERT command. It generates a unique rag_session_id and sessionId and assembles all the required values into an array (sql_params).\nPostgres (Create Project Record): This Postgres node executes the main INSERT query, using the sql_params from the previous step to create the new record in the project_contexts table. Crucially, it uses RETURNING * to output the full, newly created database row, including the permanent xata_id.\nGenerate Thread ID: A Code node generates a new, unique chat_session_id (formatted as session_...).\nSave Thread ID to Project: A Postgres node executes an UPDATE query. It takes the new_thread_id and the xata_id from the previous steps and updates the project record to include the new chat session ID.\nPrepare Success Response: A Set node takes the project_id (from the xata_id) and the session_id (from the new_thread_id) and formats them into a clean JSON object.\nRespond to Webhook: The final Respond to Webhook node sends this success object back to the UI, providing it with all the necessary IDs to initialize the new chat session.",
+        "height": 80,
+        "width": 600
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        1700
+      ],
+      "id": "8eb27b18-932f-4c82-8ec8-9e3eb749897b",
+      "name": "Sticky Note4"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "mhcmike.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "content-length": "33",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.9",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "72.219.130.70",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "96bc1b3581078b10-PDX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "origin": "http://127.0.0.1:5500",
+            "priority": "u=1, i",
+            "referer": "http://127.0.0.1:5500/",
+            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "72.219.130.70, 104.23.160.56",
+            "x-forwarded-host": "mhcmike.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-34-f494454b5-f88k9",
+            "x-is-trusted": "yes",
+            "x-real-ip": "72.219.130.70"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "projectName": "New Mike Test 2"
+          },
+          "webhookUrl": "https://mhcmike.app.n8n.cloud/webhook/d0b91f11-487b-441f-80a3-17edd5a703db",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "Webhook3": [
+      {
+        "json": {
+          "headers": {
+            "host": "mhcmike.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "content-length": "26",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.9",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "72.219.130.70",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "96c03cbd9632211c-PHX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "origin": "http://127.0.0.1:5500",
+            "priority": "u=1, i",
+            "referer": "http://127.0.0.1:5500/",
+            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "72.219.130.70, 104.23.195.94",
+            "x-forwarded-host": "mhcmike.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-34-f494454b5-f88k9",
+            "x-is-trusted": "yes",
+            "x-real-ip": "72.219.130.70"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "action": "list_projects"
+          },
+          "webhookUrl": "https://mhcmike.app.n8n.cloud/webhook/a61a290c-d8e5-4c04-980a-4ebb415a21e4",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "Trigger: Receive Session ID": [
+      {
+        "json": {
+          "headers": {
+            "host": "mhcmike.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "content-length": "787",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.9",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "72.219.130.70",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "96bfe3c15135e538-LAX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "origin": "http://127.0.0.1:5500",
+            "priority": "u=1, i",
+            "referer": "http://127.0.0.1:5500/",
+            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "72.219.130.70, 162.158.186.126",
+            "x-forwarded-host": "mhcmike.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-34-f494454b5-g4lqk",
+            "x-is-trusted": "yes",
+            "x-real-ip": "72.219.130.70"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "chat_session_id": "chat_1754664553",
+            "project_id": "rec_d2b0sq5qrj6081prfei0",
+            "rag_session_id": "rag_New_Mike_Test_3_1754664553",
+            "history": [
+              {
+                "role": "assistant",
+                "content": "Resumed project \"New Mike Test 3\". You can continue your conversation."
+              },
+              {
+                "role": "user",
+                "content": "please tell me the street address I asked you to remember"
+              },
+              {
+                "role": "assistant",
+                "content": "Badda boom badda bing! The street address you asked me to remember is 65 Enterprise."
+              },
+              {
+                "role": "user",
+                "content": "I am a real fan of the sport of motocross and have been riding for 55 years."
+              },
+              {
+                "role": "assistant",
+                "content": "Badda bing, badda boom! That's impressive55 years riding motocross! You've probably seen the sport evolve in ways most can't even imagine. Got any favorite memories or epic rides you'd like to share?"
+              }
+            ]
+          },
+          "webhookUrl": "https://mhcmike.app.n8n.cloud/webhook/6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "Webhook2": [
+      {
+        "json": {
+          "isArtificialRecoveredEventItem": true
+        }
+      }
+    ],
+    "Webhook1": []
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check if Project Exists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres": {
+      "main": [
+        [
+          {
+            "node": "Generate Thread ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Success Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Thread ID": {
+      "main": [
+        [
+          {
+            "node": "Save Thread ID to Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Thread ID to Project": {
+      "main": [
+        [
+          {
+            "node": "Prepare Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Postgres2 (Save AI Reply)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format History for AI": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Query Embedding": {
+      "main": [
+        [
+          {
+            "node": "Format Data for Vector Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Data for Vector Search": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Committed Memory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Retrieve RAG Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Session ID & Input": {
+      "main": [
+        [
+          {
+            "node": "Save User Message to History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent history": {
+      "main": [
+        [
+          {
+            "node": "Format Recent History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save User Message to History": {
+      "main": [
+        [
+          {
+            "node": "Preserve Current Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Current Inputs": {
+      "main": [
+        [
+          {
+            "node": "Format Current Input",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Rag is Active",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Config: Auto-Commit Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config: Auto-Commit Enabled": {
+      "main": [
+        [
+          {
+            "node": "If Remember Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Remember Intent": {
+      "main": [
+        [
+          {
+            "node": "Auto Commit via Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recent History": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Build OpenAI Payload1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Context consolidator": {
+      "main": [
+        [
+          {
+            "node": "Format History for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Current Input": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Build OpenAI Payload1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Rag is Active": {
+      "main": [
+        [
+          {
+            "node": "Create Query Embedding",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Recent history",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Recent history",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Committed Memory": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve RAG Chunks": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "RAG Context consolidator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Pre-flight Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Session ID & Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Embedding1": {
+      "main": [
+        [
+          {
+            "node": "Merge Embedding with Chunk Data1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Format Vector for Postgres1": {
+      "main": [
+        [
+          {
+            "node": "Insert Embedding to Xata1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Embedding to Xata1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for DB1": {
+      "main": [
+        [
+          {
+            "node": "Format Vector for Postgres1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request GCS Fetch1": {
+      "main": [
+        [
+          {
+            "node": "Chunk Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk Code1": {
+      "main": [
+        [
+          {
+            "node": "Filter1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Embedding with Chunk Data1": {
+      "main": [
+        [
+          {
+            "node": "Prepare for DB1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter1": {
+      "main": [
+        [
+          {
+            "node": "Create Embedding1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Embedding with Chunk Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Project Entry1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request GCS Fetch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook2": {
+      "main": [
+        [
+          {
+            "node": "Create Project Entry1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Project List": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Postgres1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook3": {
+      "main": [
+        [
+          {
+            "node": "Get Project List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Get Conversation History": {
+      "main": [
+        [
+          {
+            "node": "Calculate New High-Water Mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: Assemble Transcript": {
+      "main": [
+        [
+          {
+            "node": "Build: OpenAI Request Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build: OpenAI Request Body": {
+      "main": [
+        [
+          {
+            "node": "Execute: OpenAI API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: OpenAI API Call": {
+      "main": [
+        [
+          {
+            "node": "Set: Extracted Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Get High-Water Mark": {
+      "main": [
+        [
+          {
+            "node": "Set: Watermark Value",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Watermark Value": {
+      "main": [
+        [
+          {
+            "node": "DB: Get Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Extracted Summary": {
+      "main": [
+        [
+          {
+            "node": "Chunk: Distilled Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Count Facts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk: Distilled Summary": {
+      "main": [
+        [
+          {
+            "node": "API: Create Embeddings (HTTP) node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Insert Embedding1": {
+      "main": [
+        [
+          {
+            "node": "DB: Update High-Water Mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: New Messages Found?": {
+      "main": [
+        [
+          {
+            "node": "Format: Assemble Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate New High-Water Mark": {
+      "main": [
+        [
+          {
+            "node": "IF: New Messages Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Create Embeddings (HTTP) node": {
+      "main": [
+        [
+          {
+            "node": "Merge Embedding with Original Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Embedding with Original Data": {
+      "main": [
+        [
+          {
+            "node": "DB: Insert Embedding1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Project ID": {
+      "main": [
+        [
+          {
+            "node": "DB: Get High-Water Mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Update High-Water Mark": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger: Receive Session ID": {
+      "main": [
+        [
+          {
+            "node": "Get Project ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a97be5b1-9b8b-4c9d-a2ef-bff25d3a9c93",
+  "meta": {
+    "instanceId": "c4c30886ead33627446590bc73a5bef82db63d1121e51ff9b9b6f6ea92a27ca3"
+  },
+  "id": "KBhzuZHciwxJoFnU",
+  "tags": []
+}

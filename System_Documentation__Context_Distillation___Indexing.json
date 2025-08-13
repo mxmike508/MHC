@@ -1,0 +1,690 @@
+{
+  "name": "System Documentation: Context Distillation & Indexing",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM conversation_history\nWHERE\n  session_id = $1\n  AND id > $2;",
+        "options": {
+          "queryReplacement": "={{ [ $('Trigger: Receive Session ID').first().json.body.chat_session_id, $('Set: Watermark Value').first().json.highWaterMark ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        180,
+        1220
+      ],
+      "id": "47435f3a-0e63-40f1-ab19-89128e22face",
+      "name": "DB: Get Conversation History",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $('DB: Get Conversation History').all();\nlet assembledTranscript = \"\";\n\nfor (const item of items) {\n  // Only process items that have a role and content\n  if (item.json.role && item.json.content) {\n    const role = item.json.role;\n    const content = item.json.content;\n    const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);\n    assembledTranscript += `${formattedRole}: ${content}\\n`;\n  }\n}\n\n// If empty, return benign output; downstream can decide to no-op.\nif (assembledTranscript.trim() === \"\") {\n  return [{ json: { assembledTranscript: \"\" } }];\n}\n\nreturn [{ json: { assembledTranscript: assembledTranscript.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        1220
+      ],
+      "id": "18f660fb-ac24-4f7a-a806-72ffabfbf7eb",
+      "name": "Format: Assemble Transcript",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the transcript from the previous node\nconst transcript = $input.item.json.assembledTranscript;\n\n// --- CORRECTED PROMPT ---\n// This new prompt is more lenient and will capture more information.\nconst system_prompt = `You are a meticulous data extraction engine. Your sole purpose is to convert a conversation transcript into a structured JSON object containing a list of key informational statements.\n\nRules:\n- Your output MUST be a JSON object with a single key: \"facts\".\n- The \"facts\" key must contain an array of strings.\n- Each string should be a key piece of information, a specific detail, or a factual statement.\n- Extract informational content from both the User and the Assistant.\n- IGNORE simple pleasantries (hello, thanks) and questions that do not contain information.\n- If no new information is found, the \"facts\" array MUST be empty: [].`;\n\n// Build the complete JSON body for the OpenAI API call\nconst requestBody = {\n  \"model\": \"gpt-4o\",\n  \"temperature\": 0.1,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": system_prompt\n    },\n    {\n      \"role\": \"user\",\n      \"content\": transcript\n    }\n  ]\n};\n\n// Return the entire object for the next node\nreturn requestBody;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        1220
+      ],
+      "id": "ffca3ada-5789-4c13-9068-97867a2631e6",
+      "name": "Build: OpenAI Request Body"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "=application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        1220
+      ],
+      "id": "88d4ddc7-e817-4808-9ace-a96d832e1b72",
+      "name": "Execute: OpenAI API Call",
+      "credentials": {
+        "openAiApi": {
+          "id": "jSjNufUyszBKKWwb",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(\n  (SELECT last_processed_message_id FROM memory_commit_log WHERE session_id = $1),\n  0\n) as high_water_mark;",
+        "options": {
+          "queryReplacement": "={{ $('Trigger: Receive Session ID').first().json.body.chat_session_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -260,
+        1220
+      ],
+      "id": "08d00469-d575-43be-8bae-62999ff4199d",
+      "name": "DB: Get High-Water Mark",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "28e6b89f-2ac1-420d-9774-231e6d7834c3",
+              "name": "highWaterMark",
+              "value": "={{ $json.high_water_mark ?? 0 }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -40,
+        1220
+      ],
+      "id": "ebd3b142-c6ad-4e6e-8922-c17cd2dcc237",
+      "name": "Set: Watermark Value"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b2c6aead-ea59-4a6e-9101-e1f9541c8d8e",
+              "name": "summary_text",
+              "value": "={{ $json.choices[0].message.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1500,
+        1220
+      ],
+      "id": "098caadc-5e55-4326-ac5b-c0b1632310d1",
+      "name": "Set: Extracted Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count number of distilled facts for commit status / toast.\nconst s = $('Set: Extracted Summary').first().json.summary_text;\nlet count = 0;\ntry { const obj = JSON.parse(s); if (Array.isArray(obj.facts)) count = obj.facts.length; } catch (e) {}\nreturn { count };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        1320
+      ],
+      "id": "cbc18c37-0e34-4b72-b5c7-355d7723e7b1",
+      "name": "Count Facts"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node takes the JSON string from the AI, extracts the facts,\n// and returns each fact as a separate item to be embedded.\n\n// Get the summary_text which contains a JSON string of facts.\nconst summaryJsonString = $input.item.json.summary_text;\n\n// Parse the string to get the actual JSON object.\nconst summaryObject = JSON.parse(summaryJsonString);\n\n// Get the array of facts from the object.\nconst factsArray = summaryObject.facts;\n\n// If there are no facts, return an empty array to stop the workflow.\nif (factsArray.length === 0) {\n  return [];\n}\n\n// Return each fact as a separate item, with the correct key.\nreturn factsArray.map(fact => {\n  return {\n    json: {\n      \"chunk_text_for_embedding\": fact\n    }\n  }\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        1120
+      ],
+      "id": "db56085f-0a88-4e4f-b4e1-5f063a1319dc",
+      "name": "Chunk: Distilled Summary"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO rag_store (project_id, session_id, original_content, role, embedding)\nVALUES ($1, $2, $3, $4, '{{ JSON.stringify($json.embedding) }}');",
+        "options": {
+          "queryReplacement": "={{ $json.project_id }},{{ $json.session_id }},{{ $json.original_content }},{{ $json.role }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2380,
+        1120
+      ],
+      "id": "dbf668fd-ed86-4e6e-92db-7d703141e360",
+      "name": "DB: Insert Embedding1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO memory_commit_log (session_id, last_processed_message_id, processed_at)\nVALUES ($1, $2, NOW())\nON CONFLICT (session_id)\nDO UPDATE SET\n    last_processed_message_id = EXCLUDED.last_processed_message_id,\n    processed_at = NOW();",
+        "options": {
+          "queryReplacement": "={{ $('Trigger: Receive Session ID').first().json.body.chat_session_id }},{{ $('Calculate New High-Water Mark').first().json.new_high_water_mark }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2600,
+        1120
+      ],
+      "id": "584c838f-757e-495a-af9f-3adf5afc5e78",
+      "name": "DB: Update High-Water Mark",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71077881-f2db-46b6-8537-c6fece3d5296",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        620,
+        1220
+      ],
+      "id": "7602a736-f3fc-4343-b5e1-263277dfa072",
+      "name": "IF: New Messages Found?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node finds the highest 'id' from the incoming messages.\nconst items = $input.all();\nlet maxId = 0;\n\n// If there are no items, the watermark is 0.\nif (items.length === 0) {\n  return [{ json: { new_high_water_mark: maxId } }];\n}\n\n// Find the highest id in the list of messages.\nfor (const item of items) {\n  if (item.json.id > maxId) {\n    maxId = item.json.id;\n  }\n}\n\n// Return the single highest value.\nreturn [{ json: { new_high_water_mark: maxId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        1220
+      ],
+      "id": "6b7e1515-63d7-4bc9-9eac-d8ae25539b59",
+      "name": "Calculate New High-Water Mark"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"text-embedding-3-small\", \"input\": \"{{ $json.chunk_text_for_embedding }}\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1940,
+        1120
+      ],
+      "id": "abfdfa39-2c4e-4f35-9573-0a914e09eb5a",
+      "name": "API: Create Embeddings (HTTP) node",
+      "credentials": {
+        "openAiApi": {
+          "id": "jSjNufUyszBKKWwb",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// This is the corrected final assembly. It pulls data from all necessary\n// previous nodes to create the complete payload for the database.\n\n// 1. Get the new embedding.\nconst embedding = $json.data[0].embedding;\n\n// 2. Get the summary text.\nconst summaryData = $('Set: Extracted Summary').first().json;\nconst summaryText = summaryData.summary_text;\n\n// 3. Get the project ID.\nconst projectData = $('Get Project ID').first().json;\nconst projectId = projectData.project_id;\n\n// 4. Get the RAG session ID to scope long-term memory writes.\nconst triggerData = $('Trigger: Receive Session ID').first().json;\nconst sessionId = triggerData.body.rag_session_id;\n\n// 5. Get the new high-water mark we just calculated.\nconst watermarkData = $('Calculate New High-Water Mark').first().json;\nconst newHighWaterMark = watermarkData.new_high_water_mark;\n\n// 6. Build the final, complete payload with EVERYTHING needed.\nconst finalPayload = {\n  project_id: projectId,\n  session_id: sessionId,\n  original_content: summaryText,\n  role: 'summary',\n  embedding: embedding,\n  new_high_water_mark: newHighWaterMark\n};\n\nreturn finalPayload;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        1120
+      ],
+      "id": "22dbfee9-9f88-4edb-99ed-25a8ebf8a9ed",
+      "name": "Merge Embedding with Original Data"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT xata_id AS project_id FROM project_contexts WHERE chat_session_id = $1",
+        "options": {
+          "queryReplacement": "=[   {{ $('Trigger: Receive Session ID').first().json.body.chat_session_id }} ]"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -480,
+        1220
+      ],
+      "id": "d89ad3f0-1904-4ecb-80db-058bb1b964f0",
+      "name": "Get Project ID",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        1220
+      ],
+      "id": "b0109c03-9bec-4be4-9ec0-5b758b9cb145",
+      "name": "Trigger: Receive Session ID",
+      "webhookId": "6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c",
+      "options": {
+        "allowedOrigins": "*",
+        "responseHeaders": {
+          "entries": [
+            {
+              "name": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "name": "Access-Control-Allow-Methods",
+              "value": "POST, OPTIONS"
+            },
+            {
+              "name": "Access-Control-Allow-Headers",
+              "value": "Content-Type, Authorization"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: Context Distillation & Indexing\n\n\nWorkflow Name: System: Context Distillation & Indexing for Documentation\nSource File: System__Context_Distillation___Indexing_for_Documentation.json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the dedicated \"Commit to Memory\" function for the Chat 8 UI. Its purpose is to solve the problem of limited context windows in LLMs by creating a persistent, long-term memory store. It is triggered manually by the user, reads the recent, unprocessed conversation history for a given session, uses a powerful AI model to distill that conversation into a set of atomic facts, generates vector embeddings for those facts, and saves them to the rag_store database.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...6c1ce608...) listens for POST requests from the Chat 8 UI's \"Commit to Memory\" button.\nDatabase: It interacts with three key tables in the Postgres database: conversation_history (to read new messages), memory_commit_log (to track progress with a high-water mark), and rag_store (to save the final indexed memories).\nExternal Services: It makes two distinct calls to the OpenAI API: one to the Chat Completions endpoint for fact distillation and another to the Embeddings endpoint for vectorization.\nLogic: The workflow is a sequential data processing pipeline that includes a crucial \"high-water mark\" system to prevent duplicate processing of messages.\n3. Step-by-Step Data Flow\nThe workflow executes in a clear, linear sequence:\nTrigger: Receive Session ID: The workflow is triggered by a POST request from the UI. The payload contains the chat_session_id and rag_session_id for the current conversation.\nGet Project ID: A Postgres node takes the chat_session_id and queries the project_contexts table to find the associated permanent project_id.\nDB: Get High-Water Mark: A Postgres node queries the memory_commit_log table to find the ID of the last message that was processed for this chat_session_id. It uses a COALESCE function to safely default to 0 if no record exists (i.e., this is the first commit for the session).\nSet: Watermark Value: A Set node takes the high_water_mark from the previous step and prepares it for the next query.\nDB: Get Conversation History: A Postgres node queries the conversation_history table, fetching all messages for the current chat_session_id whose id is greater than the highWaterMark.\nCalculate New High-Water Mark: A Code node iterates through the messages retrieved in the previous step and finds the highest message id. This value will be saved at the end of the workflow.\nIF: New Messages Found?: An If node checks if any new messages were returned. If the count is zero, the workflow stops cleanly. If new messages exist, it proceeds.\nFormat: Assemble Transcript: A Code node takes the new messages and formats them into a clean, human-readable transcript string.\nBuild: OpenAI Request Body: A Code node constructs the full JSON payload for the fact-distillation call to the OpenAI API, including a detailed system prompt and the conversation transcript.\nExecute: OpenAI API Call: An HTTPRequest node sends the payload to the OpenAI Chat Completions API (gpt-4o).\nSet: Extracted Summary: A Set node parses the AI's response and extracts the JSON string containing the distilled facts.\nChunk: Distilled Summary: A Code node parses the JSON string of facts and splits them, outputting each individual fact as a separate item to be processed in the following steps.\nAPI: Create Embeddings (HTTP) node: (Runs for each fact) An HTTPRequest node takes each fact and calls the OpenAI Embeddings API (text-embedding-3-small) to generate its vector embedding.\nMerge Embedding with Original Data: A Code node (not a Merge node) runs to assemble the final, complete payload for the database, combining the project_id, session_id, the fact text, the role (summary), and the new embedding vector.\nDB: Insert Embedding1: (Runs for each fact) A Postgres node executes the INSERT query to save the complete record for each fact into the rag_store table.\nDB: Update High-Water Mark: The final database operation. A Postgres node performs an UPSERT on the memory_commit_log table, saving the new_high_water_mark calculated in Step 6. This ensures the next run will only process messages created after this point.\nCount Facts & Respond to Webhook6: A final Code node counts the number of facts committed, and the Respond to Webhook node sends a detailed success message (including a \"toast\" for the UI) back to the user, completing the cycle.",
+        "height": 80,
+        "width": 660
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        700,
+        1040
+      ],
+      "id": "32460683-48f6-49da-87b1-cf774641c255",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  status: 'success',\n  toast: `Committed ${$('Count Facts').first().json.count ?? 0} fact(s) to memory.`,\n  status_line: `Memory updated: project_id=${$('Get Project ID').first().json.project_id}, rag_session_id=${$('Trigger: Receive Session ID').first().json.body.rag_session_id}, new_chunks=${$('Count Facts').first().json.count ?? 0}.`,\n  chunks_committed: $('Count Facts').first().json.count ?? 0,\n  project_id: $('Get Project ID').first().json.project_id,\n  rag_session_id: $('Trigger: Receive Session ID').first().json.body.rag_session_id\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        2820,
+        1120
+      ],
+      "id": "9998b21a-b832-46ef-8b63-17de07c41f1a",
+      "name": "Respond to Webhook6"
+    }
+  ],
+  "pinData": {
+    "Trigger: Receive Session ID": [
+      {
+        "json": {
+          "headers": {
+            "host": "mhcmike.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "content-length": "787",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.9",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "72.219.130.70",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "96bfe3c15135e538-LAX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "origin": "http://127.0.0.1:5500",
+            "priority": "u=1, i",
+            "referer": "http://127.0.0.1:5500/",
+            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "72.219.130.70, 162.158.186.126",
+            "x-forwarded-host": "mhcmike.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-34-f494454b5-g4lqk",
+            "x-is-trusted": "yes",
+            "x-real-ip": "72.219.130.70"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "chat_session_id": "chat_1754664553",
+            "project_id": "rec_d2b0sq5qrj6081prfei0",
+            "rag_session_id": "rag_New_Mike_Test_3_1754664553",
+            "history": [
+              {
+                "role": "assistant",
+                "content": "Resumed project \"New Mike Test 3\". You can continue your conversation."
+              },
+              {
+                "role": "user",
+                "content": "please tell me the street address I asked you to remember"
+              },
+              {
+                "role": "assistant",
+                "content": "Badda boom badda bing! The street address you asked me to remember is 65 Enterprise."
+              },
+              {
+                "role": "user",
+                "content": "I am a real fan of the sport of motocross and have been riding for 55 years."
+              },
+              {
+                "role": "assistant",
+                "content": "Badda bing, badda boom! That's impressive55 years riding motocross! You've probably seen the sport evolve in ways most can't even imagine. Got any favorite memories or epic rides you'd like to share?"
+              }
+            ]
+          },
+          "webhookUrl": "https://mhcmike.app.n8n.cloud/webhook/6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "DB: Get Conversation History": {
+      "main": [
+        [
+          {
+            "node": "Calculate New High-Water Mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: Assemble Transcript": {
+      "main": [
+        [
+          {
+            "node": "Build: OpenAI Request Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build: OpenAI Request Body": {
+      "main": [
+        [
+          {
+            "node": "Execute: OpenAI API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute: OpenAI API Call": {
+      "main": [
+        [
+          {
+            "node": "Set: Extracted Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Get High-Water Mark": {
+      "main": [
+        [
+          {
+            "node": "Set: Watermark Value",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Watermark Value": {
+      "main": [
+        [
+          {
+            "node": "DB: Get Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Extracted Summary": {
+      "main": [
+        [
+          {
+            "node": "Chunk: Distilled Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Count Facts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk: Distilled Summary": {
+      "main": [
+        [
+          {
+            "node": "API: Create Embeddings (HTTP) node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Insert Embedding1": {
+      "main": [
+        [
+          {
+            "node": "DB: Update High-Water Mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB: Update High-Water Mark": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: New Messages Found?": {
+      "main": [
+        [
+          {
+            "node": "Format: Assemble Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate New High-Water Mark": {
+      "main": [
+        [
+          {
+            "node": "IF: New Messages Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Create Embeddings (HTTP) node": {
+      "main": [
+        [
+          {
+            "node": "Merge Embedding with Original Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Embedding with Original Data": {
+      "main": [
+        [
+          {
+            "node": "DB: Insert Embedding1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Project ID": {
+      "main": [
+        [
+          {
+            "node": "DB: Get High-Water Mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger: Receive Session ID": {
+      "main": [
+        [
+          {
+            "node": "Get Project ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e6e84529-8c6f-4ecb-aa47-3f71bf4b1667",
+  "meta": {
+    "instanceId": "c4c30886ead33627446590bc73a5bef82db63d1121e51ff9b9b6f6ea92a27ca3"
+  },
+  "id": "dZPQTwsvUsulssME",
+  "tags": []
+}
