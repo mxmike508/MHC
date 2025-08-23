@@ -1,0 +1,131 @@
+please {
+  "name": "Image Handler Workflow v3 Clean",
+  "nodes": [
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": ["POST", "OPTIONS"],
+        "path": "e09ef7c8-656d-49fb-a84a-2bc21f6c377d",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [1860, -1000],
+      "id": "b37f5486-9e10-47cf-8370-dd9adffde704",
+      "name": "Webhook",
+      "webhookId": "e09ef7c8-656d-49fb-a84a-2bc21f6c377d"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// -- Configuration --\nconst MAX_FILE_SIZE_MB = 5;\nconst ALLOWED_MIME_TYPES = new Set(['image/jpeg','image/png']);\nconst bin = (item.binary && (item.binary.file || item.binary.data)) || (item.binary && Object.values(item.binary)[0]);\nif (!bin) { throw new Error('No binary file data found in the input. Ensure the webhook receives a file field named \"file\".'); }\nconst mimeType = bin.mimeType;\nconst fileSize = bin.fileSize;\nconst fileName = bin.fileName || 'upload';\nconst maxBytes = MAX_FILE_SIZE_MB * 1024 * 1024;\nif (!ALLOWED_MIME_TYPES.has(mimeType)) { throw new Error(`Unsupported file type: '${mimeType}'. Please upload a PNG or JPEG image.`); }\nif (fileSize > maxBytes) { throw new Error(`File is too large (${(fileSize / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.`); }\nconst prev = item.json || {};\nreturn { json: { ...prev, fileName, mimeType, fileSize }, binary: item.binary };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2080, -1000],
+      "id": "fb803cf8-558b-4401-b2d8-8fa96117956e",
+      "name": "Validate & Extract (JS)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://storage.googleapis.com/upload/storage/v1/b/mhcmike-ai-chat-interface/o?uploadType=media&name={{ encodeURIComponent('Images/' + ($json.project_id || 'general') + '/' + ($json.chat_session_id || 'unknown') + '/' + (Date.now() + ($json.mimeType === 'image/png' ? '.png' : '.jpg'))) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "={{ $json.mimeType }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file",
+        "options": {
+          "response": { "response": { "fullResponse": true } },
+          "neverError": true,
+          "ignoreResponseCode": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2300, -1000],
+      "id": "5e0fd325-d70d-4cb5-b22c-10aec670d858",
+      "name": "Upload to GCS",
+      "retryOnFail": true,
+      "credentials": { "googleApi": { "id": "ibcCVTnTEjkd4DaY", "name": "Google Service Account account" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "0e483702-dcce-426b-a674-dbacf3911000", "name": "statusCode", "value": "={{$json.statusCode}}", "type": "string" },
+            { "id": "98cd5eda-c267-475a-97ab-3b7ed38d3db6", "name": "errorBody", "value": "={{$json.body}}", "type": "string" },
+            { "id": "4ca22974-ae9d-4624-96e9-46c944194d97", "name": "requestUrl", "value": "={{$json.request.url}}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2520, -1000],
+      "id": "a43c7494-0af7-4a1e-816c-1b0107dd7471",
+      "name": "Debug - Show Error"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+  "jsCode": "var status = $json.statusCode || 0;\nvar gcsBody = $json.body || {};\nvar name = null;\nif (gcsBody && typeof gcsBody === 'object') {\n  name = gcsBody.name || null;\n} else if (gcsBody && typeof gcsBody === 'string') {\n  try {\n    var parsed = JSON.parse(gcsBody);\n    name = parsed.name || null;\n  } catch (e) {}\n}\nif (!name && $json.name) name = $json.name;\nvar url = name ? ('https://storage.googleapis.com/mhcmike-ai-chat-interface/' + name) : null;\nvar error = null;\nif (!name || status < 200 || status >= 300) {\n  error = 'Image upload failed.';\n  if (gcsBody.error && gcsBody.error.message) {\n    error += ' ' + gcsBody.error.message;\n  }\n}\nreturn { json: { publicUrl: url, statusCode: status, error: error } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2740, -1000],
+      "id": "02716e32-b9b4-4c21-a707-39c8b6644e09",
+      "name": "Set Public URL"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ url: ($json.publicUrl || ('https://storage.googleapis.com/mhcmike-ai-chat-interface/' + (($json.body && $json.body.name) || $json.name))), statusCode: ($json.statusCode || 200), error: $json.error }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [2960, -1000],
+      "id": "960373df-4f0a-4f01-b507-c9aae93187f2",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validate & Extract (JS)", "type": "main", "index": 0 }]] },
+    "Validate & Extract (JS)": { "main": [[{ "node": "Upload to GCS", "type": "main", "index": 0 }]] },
+    "Upload to GCS": { "main": [[{ "node": "Debug - Show Error", "type": "main", "index": 0 }]] },
+    "Debug - Show Error": { "main": [[{ "node": "Set Public URL", "type": "main", "index": 0 }]] },
+    "Set Public URL": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "c5b20200-6661-4e7b-9b87-180d349231d0",
+  "meta": { "instanceId": "c4c30886ead33627446590bc73a5bef82db63d1121e51ff9b9b6f6ea92a27ca3" },
+  "id": "mILpGfKfTn9v63D3",
+  "tags": []
+}

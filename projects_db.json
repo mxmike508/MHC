@@ -1,0 +1,100 @@
+[
+  {
+    "projectName": "System Development (Bob 15)",
+    "status": "Active",
+    "synopsis": "Developing the core architecture and workflows for our AI-assisted development environment, focusing on AI-driven project management and intelligent assistance.",
+    "backlog": {
+      "completed": [
+        {
+          "title": "Implement 'Project Dashboard' (Phase 1: Read-Only Viewer)",
+          "description": "Created a read-only dashboard view within the chat UI (index.html) to provide a persistent, high-level overview of all active projects, their current status, and their backlogs."
+        },
+        {
+          "title": "Implement 'Commit to Memory' (Phase 1: Manual - Session Isolated)",
+          "description": "Built a user-triggered n8n workflow (System: Commit to Memory) that summarizes the recent conversation history from a specific chat session and saves this concise, human-readable Markdown summary to the 'memory_log' table in the database."
+        },
+        {
+          "title": "Implement 'GAS Session Summarizer to Gist' Workflow",
+          "description": "Developed a dedicated n8n workflow to address context drift for our direct sessions in Google AI Studio. This workflow accepts exported JSON chat history, intelligently summarizes the content using a powerful AI, and then automatically creates a new GitHub Gist with the distilled summary."
+        },
+        {
+          "title": "Implement 'AI Context Pipeline' (Distilled Memory for Assistant RAG)",
+          "description": "Designed and built a new core workflow to address 'Context Drift' for the AI chat assistant. This user-triggered pipeline intelligently summarizes long conversations within the Chat 8 interface, distills them into factual memories, and pushes those memories into the RAG vector database ('chat_embeddings') for the AI assistant's long-term memory."
+        },
+        {
+          "title": "Implement 'Create Project from URL'",
+          "description": "Wire up the 'Create Project and Index Data' button. Implement the corresponding JavaScript function to take the URL and project name, call the RAG_INDEXING_WORKFLOW_URL, and handle the response to create a new project."
+        },
+        {
+          "title": "Add graceful error handling",
+          "description": "Enhance the user experience of the Chat 8 UI by implementing robust error handling."
+        },
+        {
+          "title": "Implement Image Upload and Vision Analysis",
+          "description": "Enabled image uploading via button, drag-and-drop, and paste. Integrated with the backend to send image data to a vision-capable model (gpt-4o) for analysis."
+        },
+        {
+          "title": "Enable Markdown and HTML Rendering in UI",
+          "description": "Updated the chat UI to correctly parse and render Markdown from the model's responses. Added DOMPurify to sanitize the resulting HTML, allowing for rich content like headings, lists, and code fences."
+        }
+      ],
+      "tier1": [
+        {
+          "title": "Establish GitHub Repository",
+          "description": "Create a central GitHub repository to serve as the master folder for all project artifacts, including source code (HTML), data files (projects_db.json), and documentation (.md files). This will be the single source of truth for the project."
+        },
+        {
+          "title": "Implement Voice Input (Mic Button)",
+          "description": "Define the 'startVoice()' function and integrate the Web Speech API to enable voice-to-text transcription in the chat input field when the microphone button is clicked."
+        },
+        {
+          "title": "Implement Inactive Session Control Buttons",
+          "description": "Wire up the 'New Session', 'Delete Session', 'Bootstrap Memory', and 'Index Data' buttons in the session controls bar. Each button should trigger its corresponding, currently non-existent, backend workflow or frontend function."
+        }
+      ],
+      "tier2": [
+        {
+          "title": "Enhance 'Commit to Memory' with High-Water Mark & Viewer",
+          "description": "Upgrade the existing 'Human Memory Log' feature to prevent duplication. This enhancement will add a 'high-water mark' to track the last summarized message for each session."
+        },
+        {
+          "title": "Implement 'Project Dashboard' (Phase 2: n8n Integration)",
+          "description": "Automate updates to the Project Dashboard. This involves creating n8n workflows that can be triggered by chat commands (e.g., /new_project, /complete_task) to dynamically modify the 'projects_db.json' file."
+        },
+        {
+          "title": "Implement Project-Specific System Prompts",
+          "description": "Develop a system to allow different types of projects to automatically load unique system prompts for the AI."
+        },
+        {
+          "title": "Add monospace styling for code blocks",
+          "description": "Add CSS to render fenced code blocks and tables in a monospace font for better readability."
+        },
+        {
+          "title": "Add 'Copy' buttons to code blocks",
+          "description": "Implement a feature to show a 'Copy' button on hover for code blocks to easily copy code snippets."
+        },
+        {
+          "title": "Default to numbered lists in system prompt",
+          "description": "Update the system prompt guidance to instruct the model to use numbered steps by default for procedural instructions."
+        }
+      ],
+      "tier3": [
+        {
+          "title": "Create a database pruning feature",
+          "description": "Develop an automated workflow to manage the size of our database. This feature will periodically identify and archive or delete old, non-essential conversation history or temporary data from the databases."
+        }
+      ]
+    }
+  },
+  {
+    "projectName": "Scenario_2_test",
+    "status": "Active",
+    "synopsis": "A test scenario to validate the RAG indexing and retrieval process using a real conversation history from bob16_first 20.json.",
+    "backlog": {
+      "completed": [],
+      "tier1": [],
+      "tier2": [],
+      "tier3": []
+    }
+  }
+]

@@ -1,0 +1,459 @@
+{
+  "name": "System Documentation: RAG Indexing Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"text-embedding-ada-002\", \"input\": $json.chunk_text_for_embedding } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        80
+      ],
+      "id": "8d5308f5-a97d-49df-a8dc-eced8f54e23e",
+      "name": "Create Embedding1",
+      "executeOnce": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "jSjNufUyszBKKWwb",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Code Node: Format Vector for Postgres\n// Outputting VECTOR STRING for n8n \"Execute Query\" operation\n\nconst inputJson = $input.item.json;\nlet vectorStringForDb = '[]'; // Default\nconst embeddingVectorArray = inputJson.embedding_vector_from_api;\n\nif (embeddingVectorArray && Array.isArray(embeddingVectorArray) && embeddingVectorArray.length > 0) {\n    // Create the string '[-0.01,0.02,...]'\n    vectorStringForDb = JSON.stringify(embeddingVectorArray).trim(); \n} else {\n    console.error(\"Format Vector for PG: embedding_vector_from_api was problematic. Using default '[]'. Chunk: \" + (inputJson.original_content_for_db || \"\").substring(0,30) );\n}\n\nconst outputData = {\n  session_id_for_insert: inputJson.session_id_for_insert,\n  original_content_for_db: inputJson.original_content_for_db,\n  role_for_final_insert: inputJson.role_for_db || inputJson['role-for-db'] || 'unknown',\n  embedding_vector_string_for_db: vectorStringForDb // Outputting the string\n};\n\nif (!outputData.session_id_for_insert || !outputData.original_content_for_db || !outputData.role_for_final_insert) {\n    console.error(\"Format Vector for PG: CRITICAL - Missing required fields. Data:\", outputData);\n    return null; \n}\n\nreturn outputData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "4925544e-c680-4618-8d70-a0cfd7b68805",
+      "name": "Format Vector for Postgres1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO rag_store (project_id, session_id, original_content, role, embedding) VALUES ($1, $2, $3, $4, $5);",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [ $item(0).$node[\"Create Project Entry1\"].json[\"project_id\"], $item(0).$node[\"Create Project Entry1\"].json[\"rag_session_id\"], $json.original_content_for_db, $json.role_for_final_insert, $json.embedding_vector_string_for_db ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1980,
+        0
+      ],
+      "id": "2db59831-afe2-49d4-821d-7a645bd7e4e8",
+      "name": "Insert Embedding to Xata1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "df1df400-e07f-4834-a324-6f644c650e0d",
+              "name": "session_id_for_insert",
+              "value": "={{ $json.session_id_for_db }}",
+              "type": "string"
+            },
+            {
+              "id": "98488e14-449e-43ab-8f11-7bbaf90fb2db",
+              "name": "original_content_for_db",
+              "value": "={{ $json.chunk_text_for_embedding }}",
+              "type": "string"
+            },
+            {
+              "id": "605e03fe-51ff-434d-89a1-1b8c71126cc7",
+              "name": "role-for-db",
+              "value": "={{ ($json.original_role_for_db === 'model' || $json.original_role_for_db === 'assistant') ? 'assistant' : 'user' }}",
+              "type": "string"
+            },
+            {
+              "id": "21b390bb-4fa5-461d-a3e6-613ff3f5e823",
+              "name": "embedding_vector_from_api",
+              "value": "={{ $json.data[0].embedding }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        0
+      ],
+      "id": "9fa9d9eb-9240-40d5-a0c1-adb62ef3cecb",
+      "name": "Prepare for DB1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Webhook2').item.json.body.jsonUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "e55a7490-447a-4e2b-84cf-a91df644d3f4",
+      "name": "HTTP Request GCS Fetch1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- Intelligent Chunking Script v3 (with Debugging) ---\n\n// This line now gets the session_id from the node that created the project in the database.\nconst BATCH_SESSION_ID = $('Webhook2').item.json.body.projectName;\nconst MAX_CHUNK_SIZE_CHARS = 6000; // Safety limit (~1500 tokens)\nconst documentText = $json.data;\nconst finalItems = [];\n\n// Split the document by our manual break first.\nconst primaryChunks = documentText.split('---CHUNK_BREAK---');\n\nfor (const primaryChunk of primaryChunks) {\n    let currentChunk = primaryChunk.trim();\n    if (!currentChunk) continue;\n\n    // If a chunk is already small enough, process it.\n    if (currentChunk.length <= MAX_CHUNK_SIZE_CHARS) {\n        // --- DEBUGGING ---\n        console.log(`[OK] Chunk size: ${currentChunk.length}`);\n        finalItems.push({\n            json: {\n                chunk_text_for_embedding: currentChunk,\n                session_id_for_db: BATCH_SESSION_ID\n            }\n        });\n        continue;\n    }\n\n    // If a chunk is TOO LARGE, we must split it further.\n    // --- DEBUGGING ---\n    console.log(`[LARGE CHUNK DETECTED] Splitting chunk of size: ${currentChunk.length}`);\n    let tempChunk = \"\";\n    const sentences = currentChunk.split(/(?<=[.?!])\\s+/); // Split by sentences\n\n    for (const sentence of sentences) {\n        if ((tempChunk.length + sentence.length + 1) > MAX_CHUNK_SIZE_CHARS) {\n            // --- DEBUGGING ---\n            console.log(`[SUB-CHUNK CREATED] Size: ${tempChunk.length}`);\n            finalItems.push({\n                json: {\n                    chunk_text_for_embedding: tempChunk,\n                    session_id_for_db: BATCH_SESSION_ID\n                }\n            });\n            tempChunk = sentence;\n        } else {\n            tempChunk += (tempChunk ? \" \" : \"\") + sentence;\n        }\n    }\n    // Add the last remaining part\n    if (tempChunk) {\n        // --- DEBUGGING ---\n        console.log(`[FINAL SUB-CHUNK] Size: ${tempChunk.length}`);\n        finalItems.push({\n            json: {\n                chunk_text_for_embedding: tempChunk,\n                session_id_for_db: BATCH_SESSION_ID\n            }\n        });\n    }\n}\n\nreturn finalItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "c6f08069-a031-4ece-86b4-8d66be414519",
+      "name": "Chunk Code1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "fce304f3-7c63-4d09-87d1-adb4d190d62b",
+      "name": "Merge Embedding with Chunk Data1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "95b4011b-5ede-4775-a952-bd6963670ce9",
+              "leftValue": "={{ $json.chunk_text_for_embedding }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "8d0e0335-d15f-4c9b-8a0a-b5b757b9bdd2",
+      "name": "Filter1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH generated_ids AS (\n    SELECT\n        (EXTRACT(EPOCH FROM NOW())::BIGINT)::text AS project_id,\n        'chat_' || (EXTRACT(EPOCH FROM NOW())::BIGINT) AS chat_session_id,\n        'rag_' || REPLACE('{{$json.body.projectName}}', ' ', '_') || '_' || (EXTRACT(EPOCH FROM NOW())::BIGINT) AS rag_session_id\n),\ninserted_project AS (\n    INSERT INTO project_contexts (\n        project_name,\n        session_id,\n        chat_session_id,\n        rag_session_id,\n        status,\n        description,\n        notes,\n        lead_contact\n    )\n    SELECT\n        '{{$json.body.projectName}}',\n        g.chat_session_id,\n        g.chat_session_id,\n        g.rag_session_id,\n        'Active',\n        'Project created from Indexed URL',\n        'Source URL: {{$json.body.jsonUrl}}',\n        'Project created from URL'\n    FROM generated_ids g\n)\nSELECT project_id, chat_session_id, rag_session_id FROM generated_ids;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "id": "be09b0d0-95e5-49f6-8f68-f2ebe7974cb1",
+      "name": "Create Project Entry1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n  ({\n    status: 'success',\n    project_id: $('Create Project Entry1').first().json.project_id,\n    session_id: $('Create Project Entry1').first().json.session_id,\n    rag_session_id: $('Create Project Entry1').first().json.rag_session_id\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        0
+      ],
+      "id": "5f156c2d-b45f-48f4-bfad-a43cf285001c",
+      "name": "Prepare Final Response1",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: RAG Indexing Workflow\n\n\nWorkflow Name: RAG Indexing Workflow for Documentation\nSource File: RAG_Indexing_Workflow_for_Documentation.json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the dedicated data pipeline for bootstrapping a new project with an existing knowledge base. Its purpose is to receive a URL to a JSON file and a new project name from the UI, create the necessary project records in the database, and then systematically process the contents of the JSON file. It chunks the text, generates vector embeddings for each chunk, and saves them to the long-term memory store (rag_store), permanently associating them with the newly created project.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...303639ed...) listens for POST requests from the Chat 8 UI's \"Create from URL\" feature.\nDatabase: It interacts with both the project_contexts table (to create the new project) and the rag_store table (to save the indexed memories).\nExternal Services: It makes calls to Google Cloud Storage (GCS) to fetch the source JSON and to the OpenAI API to generate embeddings.\nLogic: The workflow is a sequential pipeline: create the project, fetch the data, chunk it, create embeddings, and save everything to the database.\n3. Step-by-Step Data Flow\nThe workflow executes in a clear, linear sequence:\nWebhook2: The workflow is triggered when the user submits a JSON URL and a new project name from the UI. The payload contains { \"projectName\": \"...\", \"jsonUrl\": \"...\" }.\nCreate Project Entry1: A Postgres node immediately executes a complex SQL query. This single query is responsible for:\nGenerating a new, unique project_id (numeric), chat_session_id, and rag_session_id.\nInserting a new record into the project_contexts table with these new IDs and the provided project name.\nReturning the newly generated IDs for use in subsequent steps.\nHTTP Request GCS Fetch1: An HTTPRequest node takes the jsonUrl from the initial webhook and fetches the raw text content of the JSON file from Google Cloud Storage.\nChunk Code1: A sophisticated Code node takes the raw text from the file. It intelligently splits the text into smaller, manageable chunks suitable for embedding, ensuring no chunk exceeds a maximum character limit. It outputs a list of items, each containing a text chunk.\nFilter1: A simple Filter node ensures that no empty chunks proceed, preventing wasted API calls.\nCreate Embedding1: (Runs for each chunk) An HTTPRequest node takes each text chunk and sends it to the OpenAI embeddings API (text-embedding-ada-002) to generate a vector embedding.\nMerge Embedding with Chunk Data1: A Merge node combines the original chunk data with the newly generated embedding vector from the previous step.\nPrepare for DB1: A Set node takes the merged data and restructures it, creating clean fields (session_id_for_insert, original_content_for_db, etc.) ready for the next step.\nFormat Vector for Postgres1: A Code node takes the embedding vector (which is a JavaScript array) and converts it into the specific string format (e.g., \"[0.1, 0.2, ...]\") required by the pgvector database type.\nInsert Embedding to Xata1: (Runs for each chunk) This is the final, critical database operation. A Postgres node takes the fully prepared data for each chunk and executes an INSERT query to save it to the rag_store table. It correctly links each memory to the project_id and rag_session_id that were generated in Step 2.\nPrepare Final Response1: After all chunks have been successfully inserted, a Set node runs once to format a clean success message.\nRespond to Webhook3: The final Respond to Webhook node sends the success object (containing the new project_id, session_id, and rag_session_id) back to the UI, signaling that the project has been created and indexed, and a new chat session can begin.",
+        "height": 80,
+        "width": 620
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        200
+      ],
+      "id": "2b41f2fc-a13f-48e2-bd24-b039fb0eab59",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"project_id\": \"{{$item(0).$node[\"Create Project Entry1\"].json[\"project_id\"]}}\",\n  \"session_id\": \"{{$item(0).$node[\"Create Project Entry1\"].json[\"chat_session_id\"]}}\",\n  \"rag_session_id\": \"{{$item(0).$node[\"Create Project Entry1\"].json[\"rag_session_id\"]}}\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        0
+      ],
+      "id": "f3c2199a-4a57-454c-bb02-0d070bad2de8",
+      "name": "Respond to Webhook3"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "303639ed-a3e2-4eae-b406-16e1c6200a81",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "http://127.0.0.1:5500"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "OPTIONS and POST"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1d5285e5-b139-45ff-8573-f5df12f821de",
+      "name": "Webhook2",
+      "webhookId": "303639ed-a3e2-4eae-b406-16e1c6200a81"
+    }
+  ],
+  "pinData": {
+    "Webhook2": [
+      {
+        "json": {
+          "isArtificialRecoveredEventItem": true
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Create Embedding1": {
+      "main": [
+        [
+          {
+            "node": "Merge Embedding with Chunk Data1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Format Vector for Postgres1": {
+      "main": [
+        [
+          {
+            "node": "Insert Embedding to Xata1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Embedding to Xata1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for DB1": {
+      "main": [
+        [
+          {
+            "node": "Format Vector for Postgres1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request GCS Fetch1": {
+      "main": [
+        [
+          {
+            "node": "Chunk Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk Code1": {
+      "main": [
+        [
+          {
+            "node": "Filter1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Embedding with Chunk Data1": {
+      "main": [
+        [
+          {
+            "node": "Prepare for DB1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter1": {
+      "main": [
+        [
+          {
+            "node": "Create Embedding1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Embedding with Chunk Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Project Entry1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request GCS Fetch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook2": {
+      "main": [
+        [
+          {
+            "node": "Create Project Entry1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "09117189-306a-43bb-9032-4177a9c267c5",
+  "meta": {
+    "instanceId": "c4c30886ead33627446590bc73a5bef82db63d1121e51ff9b9b6f6ea92a27ca3"
+  },
+  "id": "kezLT6aEKHAgLRcI",
+  "tags": []
+}

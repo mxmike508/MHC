@@ -1,0 +1,35 @@
+Master Data Contract: Bob 20 System
+1. Preamble
+This document serves as the single source of truth for all data interchange keys between the Chat 8 UI and the n8n backend workflows. Its purpose is to enforce consistency and eliminate the "whack-a-mole" syndrome caused by key mismatches. All future development and auditing must adhere to this contract.
+
+2. Core Principle
+The UI is the definitive source for the format of outgoing data. All n8n workflows that receive data from the UI must be configured to accept the keys as defined below. Internal workflow logic should then handle any necessary transformations.
+
+3. Contract Definitions
+3.1. UI -> Workflow Payload (Client to Server)
+When the UI sends data to any n8n webhook, the JSON body must use the following keys:
+
+chat_session_id (string): The unique identifier for the current conversation thread.
+project_id (string): The unique identifier for the parent project under which the session exists.
+rag_session_id (string | null): The identifier for the Retrieval-Augmented Generation (RAG) memory session, if one is active. Can be null.
+chatInput (string): The raw text of the user's message.
+3.2. Workflow -> UI Payloads (Server to Client)
+Workflows that respond to the UI must use the following keys in their JSON response body:
+
+From Create Project Workflow:
+
+session_id (string): The newly created, unique identifier for the conversation thread.
+project_id (string): The unique identifier for the newly created parent project.
+From Chat Workflow:
+
+reply (string): The AI-generated text response to be displayed to the user.
+3.3. Standardized Internal Workflow Keys
+To maintain consistency within workflows, the following standard keys should be used:
+
+summary_text (string): The standardized key for any text that is destined for summarization and/or embedding in the Commit Memory workflow.
+4. Key Translation Summary
+The following table summarizes the only key that requires translation between the UI and backend. All other keys are 1:1.
+
+Direction	Key Name	Notes
+UI -> Workflow	chat_session_id	The key used when the UI sends a session ID.
+Workflow -> UI	session_id	The key used when a workflow returns a new session ID.

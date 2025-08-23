@@ -9,6 +9,7 @@ Workflow Name: Main Chat Workflow for Documentation
 Version: As of file provided
 Project Lead: Mike Holland
 System Architect: Gemini Pro
+Status (2025-08-17): Core chat (text) and single-image vision are working in v8.4. RAG retrieval and Auto-Commit (Commit to Memory) are currently not working and require debugging.
 1. Overall Goal
 This n8n workflow serves as the central orchestration layer for the Chat 8 user interface. Its
 primary purpose is to receive user input, intelligently enrich it with multiple forms of
@@ -53,7 +54,9 @@ auto-commit functionality.
 "remember".
 3. Auto Commit via Webhook: If the intent is to remember, an HTTPRequest node
 triggers the separate "Commit to Memory" workflow, passing the necessary IDs to
-save the new fact in the background.
+save the new fact in the background. Current status: not working; verify webhook URL,
+payload contract, and downstream workflow activation. Enable Continue On Fail and log
+HTTP status/body for diagnosis.
 Phase 3: Main Logic Branching
 1. If Rag is Active: This is the primary traffic controller. It checks if
 a rag_session_Id was provided.
@@ -83,22 +86,26 @@ duplicate memories, and formats the unique results into a single, clean block of
 text.
 6. Format History for AI: A Code node takes the consolidated text and wraps it in a
 standard { role: 'system', content: '...' } object, ready for the final prompt.
-Phase 5: Final Prompt Assembly & AI Call
+Note: Current status shows no RAG system message reaching Build OpenAI Payload1.
+Next steps: ensure the `If Rag is Active` branch is taken when `rag_session_id` exists,
+the embeddings call returns a vector, both Postgres lookups return rows, and the
+consolidated system message feeds input 0 of Build OpenAI Payload1.
+Phase 5: Final Prompt Assembly & AI Call (Three-Input Assembly)
 1. Get Recent history: (Runs in parallel to the RAG path) A Postgres node queries
 the conversation_history table for the last 6 turns of the conversation.
 2. Format Recent History: A Code node formats these turns into the standard OpenAI
 message format.
 3. Format Current Input: A Code node formats the user's current message into the
-standard format.
-4. Merge: This is the final assembly point. A Merge node combines the three streams
-of context:
-o Input 1: The RAG context (from Format History for AI).
-o Input 2: The recent conversational history (from Format Recent History).
-o Input 3: The user's current message (from Format Current Input).
-5. Build OpenAI Payload1: A sophisticated Code node takes the fully merged data. It
-intelligently selects the correct system prompt (persona), assembles the final
-message array in the correct order (system prompt, RAG context, history, user
-message), and builds the complete JSON payload for the AI.
+standard format, including optional image parts for vision.
+4. Build OpenAI Payload1 (no final Merge): The final Merge node has been removed.
+This Code node now receives three inputs directly and deterministically:
+	• Input 0: The RAG context (from Format History for AI, as system content).
+	• Input 1: The recent conversational history (from Format Recent History).
+	• Input 2: The user's current message (from Format Current Input).
+	It selects the correct system persona, concatenates any RAG context, appends
+	history, then the current user message, and sets usedVision=true when an
+	image part is present. It also picks the model accordingly (e.g., gpt-4o for
+	both text and vision), and outputs { model, messages, usedVision }.
 6. HTTP Request1: Sends the final payload to the OpenAI Chat Completions API.
 
 ## Page 4

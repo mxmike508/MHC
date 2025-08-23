@@ -1,0 +1,325 @@
+{
+  "name": "System Documentation: Setup Workflow - Project Launcher",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_contexts (project_name, status, chat_session_id, rag_session_id)\nVALUES ($1, 'New', $2, $3)\nRETURNING xata_id AS project_id, chat_session_id AS thread_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.projectName, $json.chat_session_id, $json.rag_session_id ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        200
+      ],
+      "id": "d986e662-60f3-486d-99e3-b58f9b5aff4d",
+      "name": "Postgres1",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    project_name, \n    chat_session_id, \n    rag_session_id, \n    xata_id \nFROM \n    project_contexts \nORDER BY \n    xata_createdat DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -440,
+        100
+      ],
+      "id": "04736745-6606-4b5f-a511-9de2f0e7f41c",
+      "name": "Get Project List",
+      "credentials": {
+        "postgres": {
+          "id": "e1ilQ03VC1lcdrt2",
+          "name": "Postgres account 2 for BobMemory"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node receives the new project name and generates unique IDs.\n\nconst body = $json.body;\n\n// 1. Validate the input from the frontend.\nif (!body.projectName || typeof body.projectName !== 'string') {\n  throw new Error(\"The 'projectName' field is missing or is not a string in the webhook body.\");\n}\n\n// 2. Generate unique IDs for the chat session and the RAG session.\nconst timestamp = Date.now();\nconst newChatId = `chat_${body.projectName.replace(/\\s+/g, '_')}_${timestamp}`;\nconst newRagId = `rag_${body.projectName.replace(/\\s+/g, '_')}_${timestamp}`;\n\n// 3. Pass all the necessary data to the next node.\nreturn [{\n  json: {\n    projectName: body.projectName,\n    chat_session_id: newChatId,\n    rag_session_id: newRagId\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "id": "3ddbe95e-94bc-424f-923c-617f3edf8709",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fbb86eac-b086-4e9d-90a6-bce32d094885",
+              "leftValue": "={{ $items.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -220,
+        100
+      ],
+      "id": "c04cb603-d901-448a-b2c7-154e38cf319c",
+      "name": "If1",
+      "executeOnce": false,
+      "alwaysOutputData": false,
+      "retryOnFail": false,
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "6a8ed035-c3dc-4517-a61c-babf7bb846a1",
+      "name": "Respond to Webhook4"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ chat_session_id: $('Code2').item.json.chat_session_id, rag_session_id: $('Code2').item.json.rag_session_id }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        200
+      ],
+      "id": "a027de7f-7e31-428b-b7c4-bf07d4e7c84e",
+      "name": "Respond to Webhook5"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "a61a290c-d8e5-4c04-980a-4ebb415a21e4",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        100
+      ],
+      "id": "f142e23b-57b8-4bf9-9317-3cd6c3019ebe",
+      "name": "Webhook3",
+      "webhookId": "a61a290c-d8e5-4c04-980a-4ebb415a21e4",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "content": "## System Documentation: Setup Workflow - Project Launcher\n\n\nWorkflow Name: Setup Workflow: Project Launcher for Documentation\nSource File: Setup_Workflow__Project_Launcher_for_Documentation.json\nProject Lead: Mike Holland\nSystem Architect: Gemini Pro\n1. Overall Goal\nThis workflow serves as the primary \"receptionist\" and setup engine for the Chat 8 UI. It is a dual-function workflow that automates both the creation of new, simple projects and the retrieval of the complete list of existing projects. Its core purpose is to manage the project_contexts table, ensuring each project has a unique set of identifiers before handing control back to the UI.\n2. Key Components & Architecture\nTrigger: A unique n8n Webhook (...a61a290c...) listens for POST requests from the Chat 8 UI's initial launcher screen.\nDatabase: It interacts exclusively with the project_contexts table in the Postgres database to create new project records and retrieve the full project list.\nLogic: The workflow uses an If node to act as a switch, directing the incoming request down one of two distinct paths based on an action property in the request body.\n3. Step-by-Step Data Flow\nThe workflow begins with a single entry point and immediately branches based on the user's intent.\nWebhook3: The workflow is triggered by a POST request from the UI. The payload contains a JSON body with an action key, which will be either create_project or list_projects.\nBranch A: \"List Existing Projects\"\nThis is the True path of the If1 node.\nGet Project List: A Postgres node executes a SELECT query to retrieve the project_name, chat_session_id, rag_session_id, and xata_id for all records in the project_contexts table.\nIf1: The workflow logic for this branch is slightly counter-intuitive. The If node checks if the result of the Get Project List query has more than 0 items. If True, it proceeds down this \"List Projects\" path.\nCode3: A Code node takes the list of projects from the database and transforms it to match the data contract expected by the UI, ensuring all necessary keys (project_name, session_id, project_id, rag_session_id) are present.\nRespond to Webhook4: The final Respond to Webhook node sends the formatted list of projects back to the UI, which then uses it to populate the project selection dropdown.\nBranch B: \"Create New Project\"\nThis is the False path of the If1 node.\nCode2: A Code node receives the projectName from the webhook. It generates a new, unique chat_session_id and rag_session_id based on the project name and the current timestamp.\nPostgres1: This Postgres node executes an INSERT query, using the data from the Code2 node to create a new record in the project_contexts table. It uses RETURNING xata_id to get the permanent project ID back from the database.\nRespond to Webhook5: The final Respond to Webhook node sends a success response back to the UI, providing it with the newly created chat_session_id and rag_session_id so it can initialize the new chat session.",
+        "height": 80,
+        "width": 720
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        420,
+        80
+      ],
+      "id": "b72a9b36-c29d-4cbb-9a51-45b4a6380b66",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all items from the previous node's output\nconst allInputItems = $input.all();\n\n// Use .map() to transform each item into the desired format\nconst allItems = allInputItems.map(item => {\n  return {\n    project_name: item.json.project_name,\n    session_id: item.json.chat_session_id,\n    project_id: item.json.xata_id,\n    rag_session_id: item.json.rag_session_id // <-- ADD THIS LINE\n  };\n});\n\n// Return the final, correctly structured object\nreturn {\n  json: {\n    projects: allItems\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "78833e08-7d0f-4b76-9397-83c4c9110e7d",
+      "name": "Code3"
+    }
+  ],
+  "pinData": {
+    "Webhook3": [
+      {
+        "json": {
+          "headers": {
+            "host": "mhcmike.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "content-length": "26",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.9",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "72.219.130.70",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "96c03cbd9632211c-PHX",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "origin": "http://127.0.0.1:5500",
+            "priority": "u=1, i",
+            "referer": "http://127.0.0.1:5500/",
+            "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "cross-site",
+            "x-forwarded-for": "72.219.130.70, 104.23.195.94",
+            "x-forwarded-host": "mhcmike.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-34-f494454b5-f88k9",
+            "x-is-trusted": "yes",
+            "x-real-ip": "72.219.130.70"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "action": "list_projects"
+          },
+          "webhookUrl": "https://mhcmike.app.n8n.cloud/webhook/a61a290c-d8e5-4c04-980a-4ebb415a21e4",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Postgres1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Project List": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Postgres1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook3": {
+      "main": [
+        [
+          {
+            "node": "Get Project List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e53f06fb-798e-4673-9031-d0adf1222604",
+  "meta": {
+    "instanceId": "c4c30886ead33627446590bc73a5bef82db63d1121e51ff9b9b6f6ea92a27ca3"
+  },
+  "id": "4IebnzkAraxydyya",
+  "tags": []
+}

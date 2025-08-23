@@ -1,0 +1,475 @@
+﻿{
+    "name":  "Image Handler Workflow v3 Clean",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "multipleMethods":  true,
+                                         "httpMethod":  [
+                                                            "POST",
+                                                            "OPTIONS"
+                                                        ],
+                                         "path":  "e09ef7c8-656d-49fb-a84a-2bc21f6c377d",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "*"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Methods",
+                                                                                                     "value":  "POST, OPTIONS"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Headers",
+                                                                                                     "value":  "Content-Type, Authorization"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1740,
+                                       -580
+                                   ],
+                      "id":  "6620f6e1-91ff-4c07-bc86-ec671932e958",
+                      "webhookId":  "e09ef7c8-656d-49fb-a84a-2bc21f6c377d"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForEachItem",
+                                         "jsCode":  "// Validate and extract file info, and compute a stable objectName\nvar MAX_FILE_SIZE_MB = 5;\nvar ALLOWED = { \u0027image/jpeg\u0027: true, \u0027image/png\u0027: true, \u0027image/webp\u0027: true };\nvar bin = (item.binary \u0026\u0026 (item.binary.file || item.binary.data)) || (item.binary \u0026\u0026 Object.values(item.binary)[0]);\nif (!bin) { throw new Error(\u0027No binary file data found in the input. Ensure the webhook receives a file field named \"file\".\u0027); }\nvar mimeType = bin.mimeType;\nvar fileSize = bin.fileSize;\nvar fileName = bin.fileName || \u0027upload\u0027;\nvar maxBytes = MAX_FILE_SIZE_MB * 1024 * 1024;\nif (!ALLOWED[mimeType]) { throw new Error(\u0027Unsupported file type: \u0027 + mimeType + \u0027. Please upload a PNG, JPEG, or WEBP image.\u0027); }\nif (fileSize \u003e maxBytes) { throw new Error(\u0027File is too large (\u0027 + (fileSize/1024/1024).toFixed(1) + \u0027 MB). Maximum allowed size is \u0027 + MAX_FILE_SIZE_MB + \u0027 MB.\u0027); }\nvar prev = item.json || {};\nvar projectId = prev.project_id || \u0027general\u0027;\nvar chatId = prev.chat_session_id || \u0027unknown\u0027;\nvar objectName = \u0027Images/\u0027 + projectId + \u0027/\u0027 + chatId + \u0027/\u0027 + new Date().toISOString() + \u0027_\u0027 + fileName;\nvar out = Object.assign({}, prev, { fileName: fileName, mimeType: mimeType, fileSize: fileSize, objectName: objectName });\nvar newBinary = Object.assign({}, item.binary || {});\nif (!newBinary.file \u0026\u0026 bin) { newBinary.file = bin; }\nreturn { json: out, binary: newBinary };"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1960,
+                                       -580
+                                   ],
+                      "id":  "b05b7ea4-5217-4b24-8847-07a07bfd9830",
+                      "name":  "Validate \u0026 Extract (JS)"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "=https://storage.googleapis.com/upload/storage/v1/b/mhcmike-ai-chat-interface/o?uploadType=media\u0026name={{ encodeURIComponent($json.objectName) }}",
+                                         "authentication":  "predefinedCredentialType",
+                                         "nodeCredentialType":  "googleApi",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "={{ $json.mimeType }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "contentType":  "binaryData",
+                                         "inputDataFieldName":  "file",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "fullResponse":  true
+                                                                                       }
+                                                                      }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       2180,
+                                       -580
+                                   ],
+                      "id":  "c3557bc5-8f57-4929-80d2-be4ac7b9740a",
+                      "name":  "Upload to GCS",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "googleApi":  {
+                                                            "id":  "ibcCVTnTEjkd4DaY",
+                                                            "name":  "Google Service Account account"
+                                                        }
+                                      },
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "ra-obj-1",
+                                                                                     "name":  "objectName",
+                                                                                     "value":  "={{ $node[\"Validate \u0026 Extract (JS)\"].json.objectName }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "ra-mime-1",
+                                                                                     "name":  "mimeType",
+                                                                                     "value":  "={{ $node[\"Validate \u0026 Extract (JS)\"].json.mimeType }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "ra-fn-1",
+                                                                                     "name":  "fileName",
+                                                                                     "value":  "={{ $node[\"Validate \u0026 Extract (JS)\"].json.fileName }}",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+                                                         "keepOnlySet":  false
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2400,
+                                       -660
+                                   ],
+                      "id":  "5d1f8c7b-0e1a-4f6a-9b0f-merge-up-context",
+                      "name":  "Reattach Context"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "0e483702-dcce-426b-a674-dbacf3911000",
+                                                                                     "name":  "statusCode",
+                                                                                     "value":  "={{$json.statusCode}}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "98cd5eda-c267-475a-97ab-3b7ed38d3db6",
+                                                                                     "name":  "errorBody",
+                                                                                     "value":  "={{$json.body}}",
+                                                                                     "type":  "json"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "obj-1",
+                                                                                     "name":  "objectName",
+                                                                                     "value":  "={{ $json.objectName || ($json.body \u0026\u0026 $json.body.name) }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "4ca22974-ae9d-4624-96e9-46c944194d97",
+                                                                                     "name":  "requestUrl",
+                                                                                     "value":  "={{$json.request.url}}",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+                                                         "keepOnlySet":  false
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2400,
+                                       -580
+                                   ],
+                      "id":  "062480de-11e4-4f66-9c32-c359c14a40c4",
+                      "name":  "Debug - Show Error"
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "bkt-1",
+                                                                                     "name":  "bucket",
+                                                                                     "value":  "mhcmike-ai-chat-interface",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "sa-1",
+                                                                                     "name":  "serviceAccountEmail",
+                                                                                     "value":  "vertex-ai-user-for-n8n@persistant-ai-chat.iam.gserviceaccount.com",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "exp-1",
+                                                                                     "name":  "expiresSeconds",
+                                                                                     "value":  "3600",
+                                                                                     "type":  "number"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+                                                         "keepOnlySet":  false
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       2620,
+                                       -740
+                                   ],
+                      "id":  "c0d2bb27-2b04-4d83-bc71-1e5f1b6f6d01",
+                      "name":  "Config (Bucket \u0026 SA)"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForEachItem",
+                                         "jsCode":  "var bucket = String($json.bucket || \u0027mhcmike-ai-chat-interface\u0027);\nvar saEmail = String($json.serviceAccountEmail || \u0027vertex-ai-user-for-n8n@persistant-ai-chat.iam.gserviceaccount.com\u0027);\nvar expires = Number($json.expiresSeconds || 3600);\n\n// Resolve the GCS object name deterministically from upstream context\nvar name = null;\nif ($json.objectName) { name = String($json.objectName); }\nif (!name \u0026\u0026 $json.name) { name = String($json.name); }\nif (!name) { try { var ctx = $node[\u0027Reattach Context\u0027].json; if (ctx \u0026\u0026 ctx.objectName) { name = String(ctx.objectName); } } catch (e) {} }\nif (!name) { try { var v = $node[\u0027Validate \u0026 Extract (JS)\u0027].json; if (v \u0026\u0026 v.objectName) { name = String(v.objectName); } } catch (e) {} }\nif (!name \u0026\u0026 $json.body \u0026\u0026 typeof $json.body === \u0027object\u0027 \u0026\u0026 $json.body.name) { name = String($json.body.name); }\nif (!name) { throw new Error(\u0027Missing object name in Build V4 Presign.\u0027); }\n\n// Build V4 signature params\nvar d = new Date();\nfunction pad(n){ n = String(n); return (n.length===1) ? (\u00270\u0027+n) : n; }\nvar yyyy = d.getUTCFullYear();\nvar mm = pad(d.getUTCMonth() + 1);\nvar dd = pad(d.getUTCDate());\nvar HH = pad(d.getUTCHours());\nvar MM = pad(d.getUTCMinutes());\nvar SS = pad(d.getUTCSeconds());\nvar xGoogDate = \u0027\u0027 + yyyy + mm + dd + \u0027T\u0027 + HH + MM + SS + \u0027Z\u0027;\nvar ymd = \u0027\u0027 + yyyy + mm + dd;\n\nvar algorithm = \u0027GOOG4-RSA-SHA256\u0027;\nvar scope = ymd + \u0027/auto/storage/goog4_request\u0027;\nvar credential = saEmail + \u0027/\u0027 + scope;\n\nvar canonicalUri = \u0027/\u0027 + bucket + \u0027/\u0027 + (encodeURIComponent(name).split(\u0027%25\u0027).join(\u0027%2525\u0027).split(\u0027%2F\u0027).join(\u0027/\u0027));\nvar canonicalHeaders = \u0027host:storage.googleapis.com\\n\u0027;\nvar signedHeaders = \u0027host\u0027;\nvar hashedPayload = \u0027UNSIGNED-PAYLOAD\u0027;\n\nvar canonicalQuery = \u0027X-Goog-Algorithm=\u0027 + encodeURIComponent(algorithm)\n  + \u0027\u0026X-Goog-Credential=\u0027 + encodeURIComponent(credential)\n  + \u0027\u0026X-Goog-Date=\u0027 + encodeURIComponent(xGoogDate)\n  + \u0027\u0026X-Goog-Expires=\u0027 + encodeURIComponent(String(expires))\n  + \u0027\u0026X-Goog-SignedHeaders=\u0027 + encodeURIComponent(signedHeaders);\n\nvar canonicalRequest = \u0027GET\\n\u0027 + canonicalUri + \u0027\\n\u0027 + canonicalQuery + \u0027\\n\u0027 + canonicalHeaders + \u0027\\n\u0027 + signedHeaders + \u0027\\n\u0027 + hashedPayload;\n\nasync function sha256Hex(str){\n  if (typeof crypto !== \u0027undefined\u0027 \u0026\u0026 crypto.subtle) {\n    var enc = new TextEncoder();\n    var buf = await crypto.subtle.digest(\u0027SHA-256\u0027, enc.encode(str));\n    var arr = Array.from(new Uint8Array(buf));\n    var out = \u0027\u0027;\n    for (var i=0;i\u003carr.length;i++){ var h = arr[i].toString(16); if (h.length===1) h = \u00270\u0027+h; out += h; }\n    return out;\n  }\n  if (typeof require === \u0027function\u0027) {\n    try { var c = require(\u0027crypto\u0027); return c.createHash(\u0027sha256\u0027).update(str, \u0027utf8\u0027).digest(\u0027hex\u0027); } catch (e) {}\n  }\n  throw new Error(\u0027SHA-256 not available in this environment.\u0027);\n}\n\nreturn (async function(){\n  var hashedCanonicalRequest = await sha256Hex(canonicalRequest);\n  var stringToSign = algorithm + \u0027\\n\u0027 + xGoogDate + \u0027\\n\u0027 + scope + \u0027\\n\u0027 + hashedCanonicalRequest;\n  var signPayload = Buffer.from(stringToSign, \u0027utf8\u0027).toString(\u0027base64\u0027);\n  return { json: { bucket: bucket, objectName: name, serviceAccountEmail: saEmail, canonicalQuery: canonicalQuery, signPayload: signPayload } };\n})();"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2840,
+                                       -740
+                                   ],
+                      "id":  "b4b5f27e-7d77-4e06-8d8e-9a9f2b2d9f10",
+                      "name":  "Build V4 Presign"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "=https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{{ encodeURIComponent($json.serviceAccountEmail) }}:signBlob",
+                                         "authentication":  "predefinedCredentialType",
+                                         "nodeCredentialType":  "googleApi",
+                                         "sendBody":  true,
+                                         "jsonParameters":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ { payload: $json.signPayload } }}",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "fullResponse":  false
+                                                                                       }
+                                                                      }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       3060,
+                                       -860
+                                   ],
+                      "id":  "8b8d0d3f-f6c1-4c5e-9c9a-3320fd6c1e2a",
+                      "name":  "IAM: signBlob",
+                      "credentials":  {
+                                          "googleApi":  {
+                                                            "id":  "ibcCVTnTEjkd4DaY",
+                                                            "name":  "Google Service Account account"
+                                                        }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForEachItem",
+                                         "jsCode":  "// Pull presign params from Build V4 Presign and signature from IAM: signBlob\nconst presign = $node[\u0027Build V4 Presign\u0027].json || {};\nconst bucket = presign.bucket || $json.bucket;\nconst objectName = presign.objectName || $json.objectName;\nconst canonicalQuery = presign.canonicalQuery || $json.canonicalQuery;\n\nconst iam = $node[\u0027IAM: signBlob\u0027].json || {};\nconst signedBlobB64 = iam.signedBlob || $json.signedBlob || ($json.body \u0026\u0026 $json.body.signedBlob);\nif (!bucket || !objectName || !canonicalQuery) throw new Error(\u0027Missing presign params (bucket/objectName/canonicalQuery).\u0027);\nif (!signedBlobB64) throw new Error(\u0027Missing signedBlob from IAM response.\u0027);\n\nconst sigHex = Buffer.from(signedBlobB64, \u0027base64\u0027).toString(\u0027hex\u0027).toLowerCase();\nfunction encKeepSlash(s){ return encodeURIComponent(s).replace(/%2F/g,\u0027/\u0027); }\nconst resource = \u0027https://storage.googleapis.com/\u0027 + bucket + \u0027/\u0027 + encKeepSlash(objectName);\nconst url = resource + \u0027?\u0027 + canonicalQuery + \u0027\u0026X-Goog-Signature=\u0027 + sigHex;\n\nreturn { json: { publicUrl: url, statusCode: 200 } };"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       3500,
+                                       -740
+                                   ],
+                      "id":  "2e7a2f6f-dc4a-4f0d-9f41-2cb2a4f2a1e9",
+                      "name":  "Assemble Signed URL"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ ({ url: ($json.publicUrl || $json.url || null), publicUrl: ($json.publicUrl || $json.url || null), objectName: ($json.objectName || ($node[\u0027Build V4 Presign\u0027] \u0026\u0026 $node[\u0027Build V4 Presign\u0027].json \u0026\u0026 $node[\u0027Build V4 Presign\u0027].json.objectName) || null), statusCode: ($json.statusCode || 200), error: ($json.error || null) }) }}",
+                                         "options":  {
+                                                         "responseCode":  200,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "*"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Methods",
+                                                                                                     "value":  "POST, OPTIONS"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Headers",
+                                                                                                     "value":  "Content-Type, Authorization"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       2840,
+                                       -580
+                                   ],
+                      "id":  "65d6c190-1f96-496c-8205-6dd75603d27b",
+                      "name":  "Respond to Webhook"
+                  }
+              ],
+    "pinData":  {
+                    "Webhook":  [
+                                    {
+                                        "json":  {
+                                                     "headers":  {
+                                                                     "host":  "mhcmike.app.n8n.cloud",
+                                                                     "user-agent":  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                                                                     "content-length":  "466293",
+                                                                     "accept":  "*/*",
+                                                                     "accept-encoding":  "gzip, br",
+                                                                     "accept-language":  "en-US,en;q=0.9",
+                                                                     "cdn-loop":  "cloudflare; loops=1; subreqs=1",
+                                                                     "cf-connecting-ip":  "72.219.130.70",
+                                                                     "cf-ew-via":  "15",
+                                                                     "cf-ipcountry":  "US",
+                                                                     "cf-ray":  "97032546005e2f67-LAX",
+                                                                     "cf-visitor":  "{\"scheme\":\"https\"}",
+                                                                     "cf-worker":  "n8n.cloud",
+                                                                     "content-type":  "multipart/form-data; boundary=----WebKitFormBoundaryAgu40ACCsq1XSTbc",
+                                                                     "origin":  "http://127.0.0.1:5500",
+                                                                     "priority":  "u=1, i",
+                                                                     "referer":  "http://127.0.0.1:5500/",
+                                                                     "sec-ch-ua":  "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+                                                                     "sec-ch-ua-mobile":  "?0",
+                                                                     "sec-ch-ua-platform":  "\"Windows\"",
+                                                                     "sec-fetch-dest":  "empty",
+                                                                     "sec-fetch-mode":  "cors",
+                                                                     "sec-fetch-site":  "cross-site",
+                                                                     "x-forwarded-for":  "72.219.130.70, 162.158.186.221",
+                                                                     "x-forwarded-host":  "mhcmike.app.n8n.cloud",
+                                                                     "x-forwarded-port":  "443",
+                                                                     "x-forwarded-proto":  "https",
+                                                                     "x-forwarded-server":  "traefik-prod-users-gwc-34-f494454b5-ftzwd",
+                                                                     "x-is-trusted":  "yes",
+                                                                     "x-real-ip":  "72.219.130.70"
+                                                                 },
+                                                     "params":  {
+
+                                                                },
+                                                     "query":  {
+
+                                                               },
+                                                     "body":  {
+                                                                  "project_id":  "rec_d2f7rdlqrj663c9rffng",
+                                                                  "chat_session_id":  "session_cclhibibb"
+                                                              },
+                                                     "webhookUrl":  "https://mhcmike.app.n8n.cloud/webhook/e09ef7c8-656d-49fb-a84a-2bc21f6c377d",
+                                                     "executionMode":  "production"
+                                                 }
+                                    }
+                                ]
+                },
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Validate \u0026 Extract (JS)",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Validate \u0026 Extract (JS)":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Upload to GCS",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Upload to GCS":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Reattach Context",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Reattach Context":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Debug - Show Error",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Debug - Show Error":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Config (Bucket \u0026 SA)",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Config (Bucket \u0026 SA)":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Build V4 Presign",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Build V4 Presign":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "IAM: signBlob",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "IAM: signBlob":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Assemble Signed URL",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Assemble Signed URL":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Respond to Webhook",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                }
+                    },
+    "active":  true,
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "versionId":  "9024fe76-e959-4660-b44c-7dea4d8b9ed2",
+    "meta":  {
+                 "instanceId":  "c4c30886ead33627446590bc73a5bef82db63d1121e51ff9b9b6f6ea92a27ca3"
+             },
+    "id":  "mILpGfKfTn9v63D3",
+    "tags":  [
+
+             ]
+}

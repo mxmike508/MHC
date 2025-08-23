@@ -1,0 +1,187 @@
+﻿{
+    "name":  "Core Chat Test v1",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "multipleMethods":  true,
+                                         "path":  "core-chat-test",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Methods",
+                                                                                                     "value":  "GET, POST, OPTIONS"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Headers",
+                                                                                                     "value":  "Content-Type, Authorization"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "*"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       200,
+                                       300
+                                   ],
+                      "id":  "w-core-1",
+                      "name":  "Webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "// Expect { chatInput, imageUrl?, imageData? } in body\nconst b = $json.body || {};\nconst content = (b.imageUrl || (b.imageData \u0026\u0026 (b.imageData.dataUri || b.imageData.datauri)))\n  ? [{ type: \u0027text\u0027, text: (b.chatInput||\u0027\u0027) }, { type: \u0027image_url\u0027, image_url: { url: b.imageUrl || b.imageData.dataUri, detail: \u0027auto\u0027 } }]\n  : (b.chatInput || \u0027\u0027);\nreturn [{ json: { model: \u0027gpt-4o\u0027, messages: [ { role: \u0027system\u0027, content: (b.system_prompt_content || \u0027You are concise.\u0027) }, { role: \u0027user\u0027, content } ] } }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       520,
+                                       300
+                                   ],
+                      "id":  "code-build",
+                      "name":  "Build OpenAI Payload1"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.openai.com/v1/chat/completions",
+                                         "authentication":  "predefinedCredentialType",
+                                         "nodeCredentialType":  "openAiApi",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ { model: $json.model, messages: $json.messages } }}",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "responseFormat":  "json"
+                                                                                       }
+                                                                      }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       820,
+                                       300
+                                   ],
+                      "id":  "http-openai",
+                      "name":  "HTTP Request1",
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForEachItem",
+                                         "jsCode":  "// In \u0027Run Once for Each Item\u0027 mode, return a single object: { json: { reply } }\ntry {\n  const r = ($input.item \u0026\u0026 $input.item.json) ? $input.item.json : {};\n  let reply = \u0027\u0027;\n  if (r \u0026\u0026 r.choices \u0026\u0026 r.choices[0] \u0026\u0026 r.choices[0].message \u0026\u0026 r.choices[0].message.content) {\n    reply = String(r.choices[0].message.content);\n  } else if (typeof r === \u0027string\u0027 \u0026\u0026 r.trim()) {\n    reply = r.trim();\n  } else if (r \u0026\u0026 (r.error || r.message || typeof r.statusCode !== \u0027undefined\u0027)) {\n    const msg = (r.error \u0026\u0026 (r.error.message || r.error)) || r.message || \u0027\u0027;\n    const sc = (typeof r.statusCode !== \u0027undefined\u0027) ? (\u0027 (HTTP \u0027 + r.statusCode + \u0027)\u0027) : \u0027\u0027;\n    const m = (typeof msg === \u0027string\u0027) ? msg : JSON.stringify(msg);\n    reply = (\u0027Request failed\u0027 + sc + \u0027: \u0027 + m).slice(0, 800);\n  } else {\n    reply = \u0027No content from model.\u0027;\n  }\n  return { json: { reply } };\n} catch (e) {\n  return { json: { reply: \u0027Handler error: \u0027 + (e \u0026\u0026 e.message ? e.message : \u0027unknown\u0027) } };\n}"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1040,
+                                       300
+                                   ],
+                      "id":  "code-shape",
+                      "name":  "Code1",
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $node[\u0027Code1\u0027].json || { reply: \u0027No reply produced upstream (Code1 missing).\u0027 } }}",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "*"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       1260,
+                                       300
+                                   ],
+                      "id":  "resp-core",
+                      "name":  "Respond to Webhook2"
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Build OpenAI Payload1",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ],
+                                                     [
+                                                         {
+                                                             "node":  "Build OpenAI Payload1",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Build OpenAI Payload1":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "HTTP Request1",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "HTTP Request1":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Code1",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Code1":  {
+                                      "main":  [
+                                                   [
+                                                       {
+                                                           "node":  "Respond to Webhook2",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ]
+                                               ]
+                                  }
+                    },
+    "active":  true,
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "id":  "coreChatTest",
+    "tags":  [
+
+             ]
+}

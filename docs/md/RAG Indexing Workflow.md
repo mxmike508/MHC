@@ -9,6 +9,7 @@ Workflow Name: RAG Indexing Workflow for Documentation
 Source File: RAG_Indexing_Workflow_for_Documentation.json
 Project Lead: Mike Holland
 System Architect: Gemini Pro
+Status (2025-08-17): Indexing pipeline is documented as linear and deterministic. In the live Main Chat v8.4, the downstream RAG retrieval/usage is currently not working; verify this pipeline’s outputs are present in `rag_store` and that the main chat queries are correctly filtering by `project_id` and `rag_session_id`.
 1. Overall Goal
 This workflow serves as the dedicated data pipeline for bootstrapping a new project with an
 existing knowledge base. Its purpose is to receive a URL to a JSON file and a new project
@@ -70,3 +71,8 @@ a Set node runs once to format a clean success message.
 object (containing the new project_id, session_id, and rag_session_id) back to the
 UI, signaling that the project has been created and indexed, and a new chat session
 can begin.
+
+Next Steps for Debugging (RAG usage in Main Chat):
+- Spot check the newly created project’s rows in `rag_store` for the expected `project_id` and `rag_session_id`.
+- Confirm pgvector column format matches the query functions in Main Chat.
+- Ensure Main Chat’s two Postgres retrieval nodes use the same IDs and similarity threshold expected here.
