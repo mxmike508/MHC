@@ -1,0 +1,2862 @@
+<!--
+State of the Code (as of 2025-08-07):
+
+This is a single-page application (SPA) for a chat interface that interacts with an n8n backend.
+
+**CURRENT STATUS:**
+
+
+Core Functionality:
+1.  **Project Launcher**: On startup, the user can either create a new project or continue an existing one.
+2.  **Project Creation**:
+    - Simple: Creates a project with a name, generating a `project_id` and a `session_id`. (WORKING)
+    - From URL: Creates a project and performs an initial data indexing from a provided JSON URL, generating a `project_id`, `session_id`, and `rag_session_id`. (WORKING)
+3.  **Continue Project**:
+    - Fetches a list of existing projects from the backend.
+    - Populates a dropdown. When a project is selected, it should load the corresponding `project_id`, `session_id`, and `rag_session_id` into the application's state. (BUGGY)
+4.  **Chat Interface**:
+    - Once a project is active, the user can chat. Messages are sent to the backend with the current `project_id`, `chat_session_id`, and `rag_session_id`.
+    - Supports "Committing to Me|\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n history to a specific backend workflow to be summarized and stored in a RAG store. The backend returns an updated `rag_session_id`.
+5.  **State Management**:
+    - The application state (current IDs) is held in global JavaScript variables (`currentProjectId`, `currentChatId`, `currentRagId`).
+    - This state is persisted across page reloads using `sessionStorage`.
+    - The primary bug is in the `handleProjectSelection` function, where the `rag_session_id` is not being correctly retrieved and set from the dropdown's `dataset`, leading to failed RAG lookups.
+
+Backend Endpoints (n8n webhooks):
+- SETUP_WORKFLOW_URL: For creating simple projects.
+- LIST_PROJECTS_URL: For listing existing projects.
+- RAG_INDEXING_WORKFLOW_URL: For creating projects from a URL and indexing data.
+- CHAT_WORKFLOW_URL: For handling chat messages.
+- COMMIT_MEMORY_WORKFLOW_URL: For committing conversation history to memory.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat 8 v9.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+        #chat-container { max-width: 1400px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #ccc; padding: 20px; position: relative; } /* Added position: relative */
+
+        #session-controls { margin-bottom: 15px; display: flex; gap: 10px; align-items: center;}
+        #sessionSelect { padding: 8px; border-radius: 4px; flex-grow: 1; }
+        #branchSelect { padding: 8px; border-radius: 4px; border: 2px solid #1976d2; background-color: #e3f2fd; color: #1976d2; font-weight: bold; min-width: 180px; }
+        #branchSelect:focus { outline: none; border-color: #0d47a1; }
+        #session-controls button { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; background-color: #f0f0f0; cursor: pointer; white-space: nowrap; }
+        #session-controls button:hover { background-color: #e0e0e0; }
+
+        /* --- Chat Window Flexbox Layout --- */
+        #chat {
+          min-height: 350px;
+          max-height: 80vh; /* Allow up to 80% of viewport height */
+          min-width: 300px;
+          max-width: 100%;
+          overflow-y: auto;
+          margin-bottom: 15px;
+          border: 1px solid #ccc;
+          border-radius: 6px;
+          padding: 10px;
+          background: #fafafa;
+          resize: vertical;
+          box-sizing: border-box;
+        }
+
+        /* --- Base Message Bubble Style --- */
+        .message {
+          max-width: 80%;
+          padding: 8px 12px;
+          border-radius: 16px;
+          margin: 8px 0;
+          line-height: 1.4;
+          word-wrap: break-word;
+          display: inline-block;
+        }
+
+        /* --- AI (Bot) Message Style (Chat 7 style) --- */
+        .bot-message {
+          background: #e8f5e9;
+          color: #388e3c;
+          float: left;
+          clear: both;
+          text-align: left;
+          border-bottom-left-radius: 4px;
+        }
+
+        /* --- User Message Style (Chat 7 style) --- */
+        .user-message {
+          background: #e3f2fd;
+          color: #1976d2;
+          float: right;
+          clear: both;
+          text-align: right;
+          border-bottom-right-radius: 4px;
+        }
+
+        #input-row { display: flex; gap: 10px; margin-top: 10px; align-items: flex-start; }
+        #chat-input { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #ccc; resize: both; /* Allow both horizontal and vertical resizing */ min-height: 40px; box-sizing: border-box; }
+        #send, #mic { padding: 10px 15px; border-radius: 4px; border: 1px solid #ccc; background-color: #f0f0f0; cursor: pointer; height: 40px; box-sizing: border-box;}
+        #send:hover, #mic:hover { background-color: #e0e0e0; }
+        #recording { color: red; font-size: 0.9em; margin-left: 10px; align-self: center; }
+        #file-management { display: flex; gap: 10px; margin-top: 10px; }
+        #file-upload button { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; background-color: #f0f0f0; cursor: pointer; }
+        #file-upload button:hover { background-color: #e0e0f0; }
+        #drop-area { flex-grow: 1; border: 2px dashed #bbb; border-radius: 8px; padding: 20px; text-align: center; color: #888; background: #f9f9f9; }
+        #drop-area.dragover { border-color: #1976d2; background: #e3f2fd; color: #1976d2; }
+        
+        #preview { margin-top: 10px; text-align: center; }
+        #preview img { max-width: 150px; max-height: 150px; display: block; margin: 5px auto; border: 1px solid #ddd; }
+        #preview p { font-size: 0.9em; color: #555; margin: 4px 0; }
+        #preview button { background-color: #f8f9fa; border: 1px solid #ced4da; padding: 5px 10px; cursor: pointer; font-size: 0.8em; }
+
+        /* --- NEW - This positions the version display correctly in the bottom right corner --- */
+        #version-display {
+            position: absolute;
+            bottom: 5px;
+            right: 15px;
+            font-size: 0.75em;
+            color: #888;
+            display: block;
+        }
+    /* Debug tray to compare webhook JSON vs. bubble text */
+    #debug-tray { display:none; background:#fff7e6; border:1px solid #f0ad4e; border-radius:6px; padding:10px; margin-top:10px; font-family: Consolas, monospace; font-size:12px; max-height:180px; overflow:auto; }
+    #debug-toggle { cursor:pointer; color:#8a6d3b; font-size:12px; margin-left:8px; }
+    .debug-badge { display:inline-block; margin-left:6px; padding:2px 6px; font-size:11px; background:#eef3ff; color:#1a73e8; border:1px solid #cdd9ff; border-radius:10px; vertical-align:middle; user-select:none; }
+
+        /* --- NEW - Styling for the hidden version popup --- */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 95%;
+            max-width: 820px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .modal-content label { display: block; margin-bottom: 10px; }
+        .modal-content input { width: calc(100% - 20px); padding: 8px; margin-bottom: 15px; }
+        .modal-content button { padding: 8px 16px; cursor: pointer; }
+    /* Persona Editor sizing */
+    #persona-editor { max-height: 360px; overflow: auto; }
+    .persona-row { background:#fafafa; }
+    .persona-row .pe-key { min-width: 160px; }
+    .persona-row .pe-label { min-width: 260px; }
+
+        /* --- Progress Bar for AI Response (Animated Segment + Label, improved offset) --- */
+        #progress-bar {
+          display: none;
+          position: relative;
+          height: 24px;
+          width: 100%;
+          margin-bottom: 8px;
+          background: none;
+        }
+        #progress-bar-label {
+          position: absolute;
+          left: 0;
+          top: 0;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          font-size: 0.95em;
+          color: #1976d2;
+          font-weight: bold;
+          padding-left: 8px;
+          z-index: 2;
+          pointer-events: none;
+        }
+        #progress-bar-indicator {
+          position: absolute;
+          left: 180px; /* Increased offset to clear label */
+          top: 10px;
+          height: 4px;
+          width: 120px;
+          background: linear-gradient(90deg, #1976d2 0%, #42a5f5 100%);
+          border-radius: 2px;
+          animation: progressBarMove 1.2s linear infinite;
+          z-index: 1;
+        }
+        @keyframes progressBarMove {
+          0% { left: 180px; width: 0; opacity: 0.7; }
+          20% { left: 180px; width: 60px; opacity: 1; }
+          50% { left: 210px; width: 120px; opacity: 1; }
+          80% { left: 350px; width: 60px; opacity: 1; }
+          100% { left: 430px; width: 0; opacity: 0.7; }
+        }
+
+        /* --- ENHANCED CONFIGURATION PANEL (Sidebar) --- */
+        #config-panel {
+            position: fixed;
+            top: 0;
+            right: -400px; /* Hidden by default */
+            width: 400px;
+            height: 100vh;
+            background: #ffffff;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transition: right 0.3s ease-in-out;
+            overflow-y: auto;
+            border-left: 1px solid #e0e0e0;
+        }
+        
+        #config-panel.open {
+            right: 0; /* Slide in when open */
+        }
+        
+        #config-panel-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        #config-panel-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 1.2em;
+        }
+        
+        #config-close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #666;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        
+        #config-close-btn:hover {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .config-section {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .config-section-header {
+            padding: 15px 20px;
+            background: #fafafa;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        
+        .config-section-header:hover {
+            background: #f0f0f0;
+        }
+        
+        .config-section-title {
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .config-section-icon {
+            font-size: 1.1em;
+        }
+        
+        .config-section-toggle {
+            transition: transform 0.2s ease;
+        }
+        
+        .config-section.collapsed .config-section-toggle {
+            transform: rotate(-90deg);
+        }
+        
+        .config-section-content {
+            padding: 20px;
+            background: #ffffff;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        
+        .config-section.collapsed .config-section-content {
+            max-height: 0;
+            padding: 0 20px;
+        }
+        
+        .config-item {
+            margin-bottom: 15px;
+        }
+        
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .config-item select,
+        .config-item input[type="text"],
+        .config-item input[type="number"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background: #ffffff;
+        }
+        
+        .config-item select:focus,
+        .config-item input:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+        }
+        
+        .config-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .config-toggle input[type="checkbox"] {
+            width: auto;
+        }
+        
+        .model-option {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        
+        .model-option.selected {
+            border-color: #1976d2;
+            background: #e3f2fd;
+        }
+        
+        .model-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .model-description {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .model-capabilities {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        
+        .capability-tag {
+            background: #e0e7ff;
+            color: #3730a3;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            font-weight: 500;
+        }
+        
+        .config-section-content p {
+            margin: 0 0 15px 0;
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        
+        /* Database branch status in config */
+        .branch-status {
+            background: #f0f8ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        
+        .branch-status.production {
+            background: #f0f8f0;
+            border-color: #c8e6c8;
+        }
+        
+        .branch-status.testing {
+            background: #fff8f0;
+            border-color: #ffd6b3;
+        }
+
+        /* --- Dashboard Styles --- */
+        #dashboard-container {
+          display: none;
+          max-width: 1400px;
+          margin: 40px auto;
+          background: #fff;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px #ccc;
+          padding: 24px 20px 20px 20px;
+        }
+        .dashboard-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 24px;
+        }
+        .dashboard-title {
+          font-size: 2em;
+          font-weight: bold;
+          color: #1976d2;
+        }
+        .dashboard-close {
+          background: #e0e0e0;
+          border: none;
+          border-radius: 4px;
+          padding: 8px 16px;
+          font-size: 1em;
+          cursor: pointer;
+        }
+        .dashboard-close:hover {
+          background: #bdbdbd;
+        }
+        .project-card {
+          background: #f9f9f9;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          margin-bottom: 24px;
+          padding: 18px 20px 16px 20px;
+          box-shadow: 0 1px 4px #eee;
+        }
+        .project-card h2 {
+          margin: 0 0 8px 0;
+          color: #1976d2;
+        }
+        .project-status {
+          font-weight: bold;
+          color: #388e3c;
+          margin-bottom: 6px;
+        }
+        .project-synopsis {
+          margin-bottom: 10px;
+          color: #444;
+        }
+        .backlog-section {
+          margin-bottom: 8px;
+        }
+        .backlog-section h3 {
+          margin: 8px 0 4px 0;
+          font-size: 1.1em;
+          color: #333;
+        }
+        .backlog-section ul {
+          margin: 0 0 0 18px;
+          padding: 0;
+        }
+        .backlog-section li {
+          margin-bottom: 3px;
+        }
+
+        #project-list-loader {
+          display: none;
+          padding: 10px;
+          color: #555;
+        }
+
+                /* --- Toast Notification --- */
+                #toast {
+                    position: absolute;
+                    top: 12px;
+                    right: 12px;
+                    background: #323232;
+                    color: #fff;
+                    padding: 10px 14px;
+                    border-radius: 6px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                    display: none;
+                    z-index: 999;
+                    font-size: 0.95em;
+                    max-width: 60%;
+                }
+                #toast.success { background: #2e7d32; }
+                #toast.info { background: #1976d2; }
+                #toast.error { background: #c62828; }
+                
+        /* Enhanced Configuration Panel Styles */
+        #config-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            height: 100vh;
+            background: #ffffff;
+            border-left: 1px solid #e0e0e0;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            overflow-y: auto;
+            transition: right 0.3s ease;
+        }
+        
+        #config-panel.active {
+            right: 0;
+        }
+        
+        #config-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background: #f8f9fa;
+        }
+        
+        #config-panel-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+        }
+        
+        #config-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #config-close-btn:hover {
+            color: #000;
+            background: #e0e0e0;
+            border-radius: 50%;
+        }
+        
+        .config-section {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .config-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            cursor: pointer;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        
+        .config-section-header:hover {
+            background: #f0f0f0;
+        }
+        
+        .config-section-title {
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .config-section-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .config-section-toggle {
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.2s ease;
+        }
+        
+        .config-section.collapsed .config-section-toggle {
+            transform: rotate(-90deg);
+        }
+        
+        .config-section-content {
+            padding: 20px;
+            display: block;
+        }
+        
+        .config-section.collapsed .config-section-content {
+            display: none;
+        }
+        
+        .config-section-content p {
+            margin: 0 0 15px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .config-item {
+            margin-bottom: 15px;
+        }
+        
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .config-item select,
+        .config-item input[type="number"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background: #fff;
+        }
+        
+        .config-item select:focus,
+        .config-item input:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+        }
+        
+        .config-toggle {
+            display: flex;
+            align-items: center;
+        }
+        
+        .config-toggle input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .config-toggle label {
+            margin: 0;
+            cursor: pointer;
+        }
+        
+        .branch-status {
+            padding: 10px;
+            border-radius: 4px;
+            background: #f0f8ff;
+            border: 1px solid #1976d2;
+            margin-top: 10px;
+        }
+        
+        .status-production {
+            color: #2e7d32;
+        }
+        
+        .status-testing {
+            color: #f57c00;
+        }
+    </style>
+</head>
+<body>
+
+  <!-- Project Launcher and Containers -->
+  <div id="project-launcher">
+    <h2>Project Selector</h2>
+    <p>Please choose an option to begin.</p>
+    <button id="createProjectButton">Start New Project</button>
+    <button id="continueProjectButton">Continue Existing Project</button>
+  </div>
+
+  <div id="project-list-container" style="display: none;">
+    <h2>Existing Projects</h2>
+    <div id="project-list">
+      <div id="project-list-loader">Loading projects, please wait...</div>
+      <div id="project-selection-ui">
+        <label for="project-select-dropdown">Select a project to continue:</label>
+        <select id="project-select-dropdown"></select>
+      </div>
+      
+    </div>
+  </div>
+
+  <div id="new-project-container" style="display: none;">
+    <h2>Create New Project</h2>
+
+    <!-- Step 1: Ask the user for the type of project -->
+    <div id="new-project-choice">
+        <p>Will this project be created from a JSON data source (URL)?</p>
+        <button id="new-project-choice-yes">Yes, from URL</button>
+        <button id="new-project-choice-no">No, create empty project</button>
+    </div>
+
+    <!-- Step 2 (Path A): Simple project creation -->
+    <div id="new-project-simple" style="display: none;">
+        <label for="new-project-name-input">Project Name:</label>
+        <input type="text" id="new-project-name-input" placeholder="Enter Project Name...">
+    <label for="persona-select-simple">Persona (system prompt):</label>
+    <select id="persona-select-simple"></select>
+        <button id="createNewProjectConfirmButton">Create Project</button>
+    </div>
+
+    <!-- Step 2 (Path B): Create project from JSON URL -->
+    <div id="new-project-from-url" style="display: none;">
+        <label for="new-project-json-url">Enter JSON URL:</label>
+        <input type="text" id="new-project-json-url" placeholder="https://example.com/data.json">
+        <label for="new-project-name-from-url">Enter Project Name:</label>
+        <input type="text" id="new-project-name-from-url" placeholder="Enter Project Name...">
+    <label for="persona-select-url">Persona (system prompt):</label>
+    <select id="persona-select-url"></select>
+        <button id="createNewProjectFromUrlConfirmButton">Create Project and Index Data</button>
+        <div id="status-message" style="margin-top:10px; color:#1976d2; font-size:0.95em;"></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD CONTAINER (hidden by default) -->
+  <div id="dashboard-container" class="hidden">
+    <div class="dashboard-header">
+      <span class="dashboard-title">Project Dashboard</span>
+      <button class="dashboard-close" id="dashboard-close-btn">Back to Chat</button>
+    </div>
+    <div id="dashboard-content"></div>
+  </div>
+
+  <div id="chat-container">
+    
+    <div id="progress-bar">
+      <span id="progress-bar-label">Waiting for response:</span>
+      <span id="progress-bar-indicator"></span>
+    </div>
+    <!-- This is the single, correct set of session controls -->
+    <div id="session-controls">
+        <select id="sessionSelect"></select>
+        <select id="branchSelect" title="Database Branch">
+            <option value="main">🌟 Production (Main)</option>
+            <option value="testing-archive-aug2025">🧪 Test Branch (Archive)</option>
+        </select>
+        <button id="new-session-button">New Session</button>
+        <button id="clear-chat-button">Clear Chat</button>
+        <button id="delete-session-button">Delete Session</button>
+        <button id="dashboard-btn">Dashboard</button>
+        <button id="commit-btn">Bootstrap Memory</button>
+        <button id="index-data-btn">Index Data</button>
+    <button id="config-btn">Config</button>
+    </div>
+    
+    <div id="chat"></div>
+
+    <div id="input-row">
+        <textarea id="chat-input" placeholder="Type your message, paste an image, or add an image..." rows="2"></textarea>
+        <button id="mic" onclick="startVoice()" title="Voice Input">🎤</button>
+        <button id="send-button">Send</button>
+    <span id="image-attach-ind" style="display:none;color:#1976d2;font-size:12px;align-self:center;">📎 1 image attached</span>
+        <button id="commit-memory-btn">Commit to Memory</button>
+        <span id="recording" style="display:none;">Recording...</span>
+    </div>
+
+    <div id="file-management">
+        <div id="file-upload">
+            <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelect(event)" accept="image/*" />
+            <button onclick="document.getElementById('fileInput').click()">Upload Image</button>
+            
+            <!-- Document Upload - separate input and handler -->
+            <input type="file" id="documentInput" style="display:none;" onchange="handleDocumentSelect(event)" accept=".xlsx,.pdf,.csv,.txt,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            <button onclick="document.getElementById('documentInput').click()" title="Upload Excel, PDF, CSV, TXT, or DOCX files for business analysis">📊 Upload Document</button>
+        </div>
+        <div id="drop-area">Or drag & drop an image here</div>
+    </div>
+    <input type="file" id="jsonIndexInput" style="display:none;" accept=".json,application/json" />
+
+    <div id="preview"></div>
+
+    <!-- This is the version display, now correctly positioned by the CSS above -->
+    <div id="version-display" class="version-display"></div>
+    <span id="debug-toggle" title="Show last payload/response">[debug]</span>
+
+    <!-- Toast container -->
+    <div id="toast" class="info"></div>
+    <div id="debug-tray"></div>
+    
+  </div>
+
+  <!-- --- NEW - This is the hidden popup window for setting the version --- -->
+  <div id="version-modal" class="modal hidden">
+      <div class="modal-content">
+          <label for="new-version-input">Enter new version text:</label>
+          <input type="text" id="new-version-input" placeholder="e.g., Chat 8 v4">
+          <button id="version-ok">OK</button>
+      </div>
+  </div>
+
+    <!-- Enhanced Configuration Panel (Sidebar) -->
+    <div id="config-panel">
+        <div id="config-panel-header">
+            <h3>⚙️ Configuration</h3>
+            <button id="config-close-btn">&times;</button>
+        </div>
+        
+        <!-- Model Selection Section -->
+        <div class="config-section collapsed" id="model-section">
+            <div class="config-section-header">
+                <div class="config-section-title">
+                    <span class="config-section-icon">🤖</span>
+                    Model Selection
+                </div>
+                <span class="config-section-toggle">▶</span>
+            </div>
+            <div class="config-section-content">
+                <p>Choose the optimal AI model for different types of tasks and conversations.</p>
+                
+                <div class="config-item">
+                    <label>Default Chat Model</label>
+                    <select id="cfg-default-model">
+                        <option value="claude-4-sonnet" selected>Claude 4 Sonnet - Strategic thinking</option>
+                        <option value="gpt-4o">GPT-4o (OpenAI) - Balanced performance</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo - Fast responses</option>
+                        <option value="claude-3-opus">Claude 3 Opus - Deep analysis</option>
+                    </select>
+                </div>
+                
+                <div class="config-item">
+                    <label>Vision Model (Image Analysis)</label>
+                    <select id="cfg-vision-model">
+                        <option value="gpt-4o">GPT-4o (Recommended)</option>
+                        <option value="claude-4-sonnet">Claude 4 Sonnet</option>
+                        <option value="gpt-4-vision">GPT-4 Vision</option>
+                    </select>
+                </div>
+                
+                <div class="config-item">
+                    <label>Code & Technical Model</label>
+                    <select id="cfg-code-model">
+                        <option value="claude-4-sonnet" selected>Claude 4 Sonnet (Recommended)</option>
+                        <option value="gpt-4o">GPT-4o</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                    </select>
+                </div>
+                
+                <div class="config-item">
+                    <label>Strategic Planning Model</label>
+                    <select id="cfg-strategy-model">
+                        <option value="claude-4-sonnet" selected>Claude 4 Sonnet (Recommended)</option>
+                        <option value="claude-3-opus">Claude 3 Opus - Deep thinking</option>
+                        <option value="gpt-4o">GPT-4o</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Database Branch Section -->
+        <div class="config-section collapsed" id="database-section">
+            <div class="config-section-header">
+                <div class="config-section-title">
+                    <span class="config-section-icon">🌿</span>
+                    Database Branch
+                </div>
+                <span class="config-section-toggle">▶</span>
+            </div>
+            <div class="config-section-content">
+                <p>Control which database branch to use for projects and conversations.</p>
+                
+                <div class="config-item">
+                    <label>Current Branch</label>
+                    <select id="cfg-database-branch">
+                        <option value="main">🌟 Production (Main Branch)</option>
+                        <option value="testing-archive-aug2025">🧪 Test Branch (Archive)</option>
+                    </select>
+                </div>
+                
+                <div class="branch-status" id="branch-status-display">
+                    <strong>Status:</strong> <span id="branch-status-text">Production - Clean environment</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Features Section -->
+        <div class="config-section collapsed" id="features-section">
+            <div class="config-section-header">
+                <div class="config-section-title">
+                    <span class="config-section-icon">⚙️</span>
+                    Features
+                </div>
+                <span class="config-section-toggle">▶</span>
+            </div>
+            <div class="config-section-content">
+                <p>Enable or disable specific features and behaviors.</p>
+                
+                <div class="config-item">
+                    <div class="config-toggle">
+                        <input type="checkbox" id="cfg-show-toasts">
+                        <label for="cfg-show-toasts">Show commit notification toasts</label>
+                    </div>
+                </div>
+                
+                <div class="config-item">
+                    <div class="config-toggle">
+                        <input type="checkbox" id="cfg-auto-commit" disabled>
+                        <label for="cfg-auto-commit">Auto-commit on "remember..." messages (coming soon)</label>
+                    </div>
+                </div>
+                
+                <div class="config-item">
+                    <div class="config-toggle">
+                        <input type="checkbox" id="cfg-debug-mode">
+                        <label for="cfg-debug-mode">Debug mode (show technical details)</label>
+                    </div>
+                </div>
+                
+                <div class="config-item">
+                    <div class="config-toggle">
+                        <input type="checkbox" id="cfg-vision-auto">
+                        <label for="cfg-vision-auto">Automatically use vision model for images</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Personas Section -->
+        <div class="config-section collapsed" id="personas-section">
+            <div class="config-section-header">
+                <div class="config-section-title">
+                    <span class="config-section-icon">👤</span>
+                    Personas
+                </div>
+                <span class="config-section-toggle">▶</span>
+            </div>
+            <div class="config-section-content">
+                <p>Manage AI personas and conversation styles for different contexts.</p>
+                
+                <div id="persona-editor"></div>
+                <button id="persona-add" type="button" style="margin-top: 10px; padding: 8px 16px; border: 1px solid #ddd; background: #f8f9fa; border-radius: 4px; cursor: pointer;">Add Persona</button>
+            </div>
+        </div>
+        
+        <!-- Advanced Section -->
+        <div class="config-section collapsed" id="advanced-section">
+            <div class="config-section-header">
+                <div class="config-section-title">
+                    <span class="config-section-icon">🔧</span>
+                    Advanced
+                </div>
+                <span class="config-section-toggle">▶</span>
+            </div>
+            <div class="config-section-content">
+                <p>Advanced settings for power users and debugging.</p>
+                
+                <div class="config-item">
+                    <label>API Timeout (seconds)</label>
+                    <input type="number" id="cfg-api-timeout" min="5" max="120" value="25">
+                </div>
+                
+                <div class="config-item">
+                    <label>Max Context Messages</label>
+                    <input type="number" id="cfg-max-context" min="5" max="50" value="20">
+                </div>
+                
+                <div class="config-item">
+                    <button type="button" id="export-config" style="margin-right: 10px; padding: 8px 16px; border: 1px solid #ddd; background: #f8f9fa; border-radius: 4px; cursor: pointer;">Export Settings</button>
+                    <button type="button" id="import-config" style="padding: 8px 16px; border: 1px solid #ddd; background: #f8f9fa; border-radius: 4px; cursor: pointer;">Import Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Save Actions -->
+        <div style="padding: 20px; border-top: 1px solid #e0e0e0; background: #f8f9fa;">
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="config-cancel" style="padding: 10px 20px; border: 1px solid #ddd; background: #ffffff; border-radius: 4px; cursor: pointer;">Cancel</button>
+                <button id="config-save" style="padding: 10px 20px; border: none; background: #1976d2; color: white; border-radius: 4px; cursor: pointer;">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    
+<script>
+function initializeDefaultModel() {
+    // Ensure Claude 4 Sonnet is always the default for new sessions
+    try {
+        const defaultModelSelect = document.getElementById('cfg-default-model');
+        
+        // If no value is set or it's empty, force Claude 4 Sonnet
+        if (!defaultModelSelect.value || defaultModelSelect.value === '') {
+            console.log('🔧 Initializing default model to Claude 4 Sonnet');
+            defaultModelSelect.value = 'claude-4-sonnet';
+            
+            // Also save to localStorage
+            localStorage.setItem('cfg_default_model', 'claude-4-sonnet');
+        }
+        
+        console.log('✅ Default model initialized:', defaultModelSelect.value);
+    } catch (e) {
+        console.error('❌ Error initializing default model:', e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 JavaScript loaded successfully!');
+    console.log('Config button element:', document.getElementById('config-btn'));
+    console.log('Config panel element:', document.getElementById('config-panel'));
+
+    // --- STAGE 1: CONFIGURATION & STATE (Define ALL variables first) ---
+
+    // URLs
+    const SETUP_WORKFLOW_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/d0b91f11-487b-441f-80a3-17edd5a703db';
+    const LIST_PROJECTS_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/a61a290c-d8e5-4c04-980a-4ebb415a21e4';
+    const RAG_INDEXING_WORKFLOW_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/303639ed-a3e2-4eae-b406-16e1c6200a81';
+    const CHAT_WORKFLOW_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/3c92075f-a856-439a-b70d-73f3c847f8fa';
+    const COMMIT_MEMORY_WORKFLOW_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c';
+    // Optional: set this to your deployed Image Handler webhook to offload uploads; leave blank to use inline base64 fallback
+    const IMAGE_HANDLER_WORKFLOW_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/e09ef7c8-656d-49fb-a84a-2bc21f6c377d';
+    // Document Handler webhook for Excel forecasting analysis
+    const DOCUMENT_HANDLER_WORKFLOW_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/0f0b56ad-64e2-4008-9108-eb247c85787c';
+    // BuilderTrend Forecasting Engine webhook for construction data analysis
+    const BUILDERTREND_FORECASTING_WORKFLOW_URL = 'https://n8n.srv997771.hstgr.cloud/webhook/buildertrend-forecasting-engine';
+
+    // Database Branch Configuration
+    const DATABASE_BRANCHES = {
+        'main': {
+            name: '🌟 Production (Main)',
+            description: 'Clean production database',
+            xata_branch: 'main'
+        },
+        'testing-archive-aug2025': {
+            name: '🧪 Test Branch (Archive)',
+            description: 'All testing and development data',
+            xata_branch: 'testing-archive-aug2025' DP4Z
+        }
+    };
+    let currentDatabaseBranch = 'main'; // Default to production
+
+    // State Variables
+    let currentChatId = null;
+    let currentProjectId = null;
+    let currentRagId = null;
+    let sessions = {};
+    let currentImageData = null; // legacy inline base64 fallback
+    let currentImageUrl = null;  // preferred: URL returned by Image Handler
+    let lastCommitMessageCount = 0;
+    let showCommitToasts = true;
+
+    // DOM Element References
+    const startScreen = document.getElementById('project-launcher');
+    const projectListContainer = document.getElementById('project-list-container');
+    const newProjectFormsContainer = document.getElementById('new-project-container');
+    const newProjectChoiceContainer = document.getElementById('new-project-choice');
+    const newProjectSimpleDiv = document.getElementById('new-project-simple');
+    const newProjectFromUrlDiv = document.getElementById('new-project-from-url');
+    const mainChatContainer = document.getElementById('chat-container');
+    const chat = document.getElementById('chat');
+    const chatInput = document.getElementById('chat-input');
+    const projectSelectDropdown = document.getElementById('project-select-dropdown');
+    const statusMessage = document.getElementById('status-message');
+    const dashboardContainer = document.getElementById('dashboard-container');
+    const dashboardContent = document.getElementById('dashboard-content');
+    const versionDisplay = document.getElementById('version-display');
+    const sessionSelect = document.getElementById('sessionSelect');
+    
+    // Buttons and Inputs
+    const continueProjectButton = document.getElementById('continueProjectButton');
+    const createProjectButton = document.getElementById('createProjectButton'); // This is the CORRECT ID for "Start New Project"
+    const newProjectChoiceYes = document.getElementById('new-project-choice-yes');
+    const newProjectChoiceNo = document.getElementById('new-project-choice-no');
+    const newProjectNameInput = document.getElementById('new-project-name-input');
+    const createSimpleProjectButton = document.getElementById('createNewProjectConfirmButton');
+    const createIndexProjectButton = document.getElementById('createIndexProjectBtn');
+    const commitMemoryButton = document.getElementById('commit-memory-btn');
+    const sendButton = document.getElementById('send-button');
+    const clearSessionButton = document.getElementById('clear-chat-button');
+    const dashboardBtn = document.getElementById('dashboard-btn');
+    const dashboardCloseBtn = document.getElementById('dashboard-close-btn');
+    const configBtn = document.getElementById('config-btn');
+    const configPanel = document.getElementById('config-panel');
+    const cfgShowToasts = document.getElementById('cfg-show-toasts');
+    const cfgAutoCommit = document.getElementById('cfg-auto-commit');
+    const cfgSave = document.getElementById('config-save');
+    const cfgCancel = document.getElementById('config-cancel');
+    const toastEl = document.getElementById('toast');
+    const createProjectFromUrlButton = document.getElementById('createNewProjectFromUrlConfirmButton');
+    const newProjectJsonUrlInput = document.getElementById('new-project-json-url');
+    const newProjectNameFromUrlInput = document.getElementById('new-project-name-from-url');
+    const personaSelectSimple = document.getElementById('persona-select-simple');
+    const personaSelectUrl = document.getElementById('persona-select-url');
+    const personaAddBtn = document.getElementById('persona-add');
+    const progressBar = document.getElementById('progress-bar');
+    const progressBarLabel = document.getElementById('progress-bar-label');
+    const debugToggle = document.getElementById('debug-toggle');
+    const debugTray = document.getElementById('debug-tray');
+    // Image UI elements
+    const fileInputEl = document.getElementById('fileInput');
+    const dropAreaEl = document.getElementById('drop-area');
+    const previewEl = document.getElementById('preview');
+
+
+    // --- STAGE 2: CORE FUNCTIONS (Define ALL functions next) ---
+
+    // Generate a stable RAG session id when the backend doesn't provide one
+    function genRagSessionId() {
+        try { if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID(); } catch {}
+        const rnd = Math.random().toString(16).slice(2);
+        return `rag-${Date.now()}-${rnd}`;
+    }
+    // Ensure we always have a rag id before committing memory
+    function ensureRagId() {
+        if (!currentRagId) {
+            currentRagId = genRagSessionId();
+            try { saveState(); } catch {}
+            try { showToast('New memory scope created for this session.', 'info', 1800); } catch {}
+        }
+        return currentRagId;
+    }
+
+    // === DATABASE BRANCH MANAGEMENT ===
+    function initializeBranchSelector() {
+        const branchSelect = document.getElementById('branchSelect');
+        if (!branchSelect) return;
+
+        // Load saved branch preference
+        const savedBranch = sessionStorage.getItem('currentDatabaseBranch');
+        if (savedBranch && DATABASE_BRANCHES[savedBranch]) {
+            currentDatabaseBranch = savedBranch;
+        }
+
+        // Set the selector to the current branch
+        branchSelect.value = currentDatabaseBranch;
+
+        // Add change event listener
+        branchSelect.addEventListener('change', handleBranchChange);
+
+        // Update UI to show current branch
+        updateBranchStatus();
+    }
+
+    function handleBranchChange(event) {
+        const newBranch = event.target.value;
+        if (!DATABASE_BRANCHES[newBranch]) {
+            console.error('Invalid database branch:', newBranch);
+            return;
+        }
+
+        const oldBranch = currentDatabaseBranch;
+        currentDatabaseBranch = newBranch;
+        
+        // Save to session storage
+        sessionStorage.setItem('currentDatabaseBranch', newBranch);
+        
+        // Update UI
+        updateBranchStatus();
+        
+        // Show confirmation
+        const branchInfo = DATABASE_BRANCHES[newBranch];
+        addMessage('system', `🔄 **Database Branch Changed**\n\n**From:** ${DATABASE_BRANCHES[oldBranch].name}\n**To:** ${branchInfo.name}\n\n${branchInfo.description}\n\n*Note: You may need to reload projects to see data from the new branch.*`, true);
+        
+        // Clear current session data since we're switching branches
+        clearSessionData();
+    }
+
+    function updateBranchStatus() {
+        const branchSelect = document.getElementById('branchSelect');
+        const branchInfo = DATABASE_BRANCHES[currentDatabaseBranch];
+        
+        if (branchSelect && branchInfo) {
+            branchSelect.title = `Current: ${branchInfo.description}`;
+            
+            // Update visual styling based on branch
+            if (currentDatabaseBranch === 'main') {
+                branchSelect.style.borderColor = '#4caf50';
+                branchSelect.style.backgroundColor = '#e8f5e8';
+                branchSelect.style.color = '#2e7d32';
+            } else {
+                branchSelect.style.borderColor = '#ff9800';
+                branchSelect.style.backgroundColor = '#fff3e0';
+                branchSelect.style.color = '#f57c00';
+            }
+        }
+    }
+
+    function clearSessionData() {
+        // Clear current session data when switching branches
+        currentChatId = null;
+        currentProjectId = null;
+        currentRagId = null;
+        sessions = {};
+        
+        // Clear session storage (except branch preference)
+        const branchPref = sessionStorage.getItem('currentDatabaseBranch');
+        sessionStorage.clear();
+        if (branchPref) {
+            sessionStorage.setItem('currentDatabaseBranch', branchPref);
+        }
+        
+        // Clear chat display
+        const chat = document.getElementById('chat');
+        if (chat) chat.innerHTML = '';
+        
+        // Return to project launcher
+        initializeUI();
+    }
+
+    function getCurrentDatabaseBranch() {
+        return currentDatabaseBranch;
+    }
+
+    // Markdown -> safe HTML renderer
+    function mdToHtmlSafe(md) {
+        try {
+            const raw = marked.parse(md || '');
+            // Allow http/https/mailto/tel and data:image base64 for inline images
+            return DOMPurify.sanitize(raw, { ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|data:image\/[^;]+;base64,))/i });
+        } catch (e) {
+            return md || '';
+        }
+    }
+
+    function addMessage(sender, text, isHtml = false) {
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message', `${sender}-message`);
+        if (isHtml) {
+            messageElement.innerHTML = text;
+        } else {
+            messageElement.textContent = text;
+        }
+        chat.appendChild(messageElement);
+        chat.scrollTop = chat.scrollHeight;
+        return messageElement;
+    }
+
+    // --- Image helpers (single image support) ---
+    function validateImageFile(file) {
+        const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
+        if (!allowed.has(file.type)) return { ok: false, error: 'Unsupported image type. Please use PNG, JPG, or WEBP.' };
+        const maxBytes = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxBytes) return { ok: false, error: 'Image too large (max 5 MB).' };
+        return { ok: true };
+    }
+    
+    function validateDocumentFile(file) {
+        const allowed = new Set([
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+            'application/vnd.ms-excel', // .xls
+            'application/pdf', // .pdf
+            'text/csv', // .csv
+            'text/plain', // .txt
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
+        ]);
+        if (!allowed.has(file.type)) {
+            return { ok: false, error: 'Unsupported document type. Please use Excel (.xlsx/.xls), PDF, CSV, TXT, or Word (.docx) files.' };
+        }
+        const maxBytes = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxBytes) return { ok: false, error: 'Document too large (max 10 MB).' };
+        return { ok: true };
+    }
+    function fileToDataURL(file) {
+        return new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = reject;
+            r.readAsDataURL(file);
+        });
+    }
+    function bytesToSize(b){
+        if (!b && b !== 0) return '';
+        const u = ['B','KB','MB','GB'];
+        const i = Math.floor(Math.log(b) / Math.log(1024));
+        return (b / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
+    }
+    async function uploadImageToHandler(file) {
+        if (!IMAGE_HANDLER_WORKFLOW_URL) return null;
+        const fd = new FormData();
+        fd.append('file', file, file.name);
+        // Include optional metadata to help the handler build a structured storage path
+        try {
+            if (currentProjectId) fd.append('project_id', currentProjectId);
+            if (currentChatId) fd.append('chat_session_id', currentChatId);
+        } catch {}
+        try {
+            const resp = await fetchWithTimeout(IMAGE_HANDLER_WORKFLOW_URL, { method: 'POST', body: fd });
+            if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
+            const data = await readJsonSafe(resp);
+            const url = (data && (data.url || data.publicUrl || data.imageUrl || data.fileUrl)) || null;
+            return url;
+        } catch (e) {
+            console.warn('uploadImageToHandler failed, will fallback to inline base64:', e);
+            return null;
+        }
+    }
+
+    // Enhanced document processing function with Buildertrend integration
+    async function processDocumentFile(file) {
+        // Determine if this is a Buildertrend file
+        const isBuildertrend = file.name.includes('Jobsites_') || file.name.includes('InvoiceBillsPos_');
+        
+        // Choose the appropriate workflow endpoint
+        let workflowUrl, workflowType;
+        if (isBuildertrend && BUILDERTREND_FORECASTING_WORKFLOW_URL) {
+            workflowUrl = BUILDERTREND_FORECASTING_WORKFLOW_URL;
+            workflowType = 'buildertrend_forecasting';
+        } else if (DOCUMENT_HANDLER_WORKFLOW_URL) {
+            workflowUrl = DOCUMENT_HANDLER_WORKFLOW_URL;
+            workflowType = 'document_analysis';
+        } else {
+            throw new Error('No document handler configured');
+        }
+        
+        const fd = new FormData();
+        fd.append('file', file, file.name);
+        
+        // Include metadata for the document handler
+        try {
+            if (currentProjectId) fd.append('project_id', currentProjectId);
+            if (currentChatId) fd.append('chat_session_id', currentChatId);
+            fd.append('file_type', file.type);
+            fd.append('file_size', file.size.toString());
+            fd.append('workflow_type', workflowType);
+        } catch {}
+        
+        try {
+            const resp = await fetchWithTimeout(workflowUrl, { 
+                method: 'POST', 
+                body: fd,
+                // Add headers to help with CORS
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!resp.ok) {
+                // Provide more detailed error information
+                const errorText = await resp.text().catch(() => 'Unknown error');
+                throw new Error(`Document upload failed: ${resp.status} ${resp.statusText}\nDetails: ${errorText}`);
+            }
+            
+            const data = await readJsonSafe(resp);
+            
+            // Handle the response from Document Handler
+            if (data && data.status === 'success') {
+                // Add the document context to conversation
+                let contextMessage = `📊 **Document Successfully Uploaded & Analyzed**\n\n`;
+                contextMessage += `**File**: ${file.name}\n`;
+                contextMessage += `**Type**: ${data.documentType || 'Excel'}\n`;
+                contextMessage += `**Processing Time**: ${new Date(data.processingTime).toLocaleTimeString()}\n\n`;
+                
+                // Add file structure information
+                if (data.fileStructure) {
+                    contextMessage += `**File Structure**:\n`;
+                    contextMessage += `- Rows: ${data.fileStructure.totalRows || 0}\n`;
+                    contextMessage += `- Columns: ${data.fileStructure.columns ? data.fileStructure.columns.length : 0}\n`;
+                    contextMessage += `- Contains Formulas: ${data.fileStructure.hasFormulas ? 'Yes' : 'No'}\n`;
+                    contextMessage += `- Complexity: ${data.fileStructure.complexity || 'Unknown'}\n\n`;
+                }
+                
+                contextMessage += `✅ **The document data is now available for analysis.**\n\n`;
+                contextMessage += `**You can now ask questions like:**\n`;
+                contextMessage += `• "What insights can you provide from this forecast?"\n`;
+                contextMessage += `• "Help me optimize my construction workflow based on this data"\n`;
+                contextMessage += `• "What n8n automations would help with this forecast?"\n`;
+                contextMessage += `• "Analyze trends and suggest improvements"\n\n`;
+                contextMessage += `� **Tip**: Tell me your specific goals or challenges, and I'll analyze the document accordingly!`;
+                
+                addMessage('system', contextMessage, true);
+                
+                // Store document data for future reference in the conversation
+                if (data.fileStructure) {
+                    window.uploadedDocumentContext = {
+                        filename: file.name,
+                        type: data.documentType,
+                        structure: data.fileStructure,
+                        uploadTime: data.processingTime,
+                        available: true
+                    };
+                }
+                
+                console.log('Document processed successfully:', data);
+                
+            } else if (data && data.error) {
+                throw new Error(`Document Handler error: ${data.error}`);
+            } else {
+                // If we get a 200 but no expected data, show a helpful message
+                addMessage('system', `⚠️ Document uploaded successfully, but received unexpected response format. Response: ${JSON.stringify(data, null, 2)}`, true);
+                console.log('Document upload response:', data);
+            }
+            
+        } catch (e) {
+            console.error('Document processing failed:', e);
+            
+            // Provide specific guidance based on error type
+            if (e.message.includes('CORS')) {
+                throw new Error('Document Handler workflow is not accessible. Please ensure the workflow is deployed and active in n8n.');
+            } else if (e.message.includes('500') || e.message.includes('Internal Server Error')) {
+                throw new Error('Document Handler workflow error. Please check that the workflow is properly configured and active in n8n.');
+            } else if (e.message.includes('404')) {
+                throw new Error('Document Handler workflow not found. Please deploy the Document_Handler workflow to your n8n instance.');
+            } else {
+                throw new Error(`Document processing failed: ${e.message}`);
+            }
+        }
+    }
+    async function setSingleImageFromFile(file) {
+        const v = validateImageFile(file);
+        if (!v.ok) { alert(v.error); return; }
+        // reset any prior state
+        currentImageUrl = null;
+        currentImageData = null;
+        // Show uploading state if using handler
+        if (IMAGE_HANDLER_WORKFLOW_URL) {
+            if (previewEl) previewEl.innerHTML = '<p>Uploading image…</p>';
+        }
+        let uploadedUrl = null;
+        if (IMAGE_HANDLER_WORKFLOW_URL) {
+            uploadedUrl = await uploadImageToHandler(file);
+        }
+        if (uploadedUrl) {
+            currentImageUrl = uploadedUrl;
+            renderImagePreview({ url: uploadedUrl, mime: file.type, size: file.size, filename: file.name });
+        } else {
+            // Fallback: inline data URI
+            try { if (IMAGE_HANDLER_WORKFLOW_URL) showToast('Image upload failed; using inline image instead.', 'info', 2500); } catch {}
+            const dataUri = await fileToDataURL(file);
+            currentImageData = { dataUri, mime: file.type, size: file.size, filename: file.name };
+            renderImagePreview(currentImageData);
+        }
+    }
+    function renderImagePreview(img) {
+        if (!previewEl) return;
+        const safeName = (img.filename || 'image').replace(/[<>&]/g, '');
+        const src = img.url || img.dataUri;
+        const details = `${safeName} · ${img.mime || ''} · ${bytesToSize(img.size)}`.trim();
+        previewEl.innerHTML = `
+            <div>
+              <img src="${src}" alt="preview" style="max-width:150px;max-height:150px;border:1px solid #ddd;display:block;margin:5px auto;" />
+              <p>${details}</p>
+              <button type="button" id="remove-image-btn">Remove</button>
+            </div>`;
+        const btn = document.getElementById('remove-image-btn');
+        if (btn) btn.addEventListener('click', clearSingleImage);
+        // Show a tiny indicator near the Send button
+        try {
+            const ind = document.getElementById('image-attach-ind');
+            if (ind) { ind.textContent = '📎 1 image attached'; ind.style.display = 'inline-block'; }
+        } catch {}
+    }
+    function clearSingleImage() {
+        currentImageData = null;
+        currentImageUrl = null;
+        if (previewEl) previewEl.innerHTML = '';
+        if (fileInputEl) fileInputEl.value = '';
+        try {
+            const ind = document.getElementById('image-attach-ind');
+            if (ind) ind.style.display = 'none';
+        } catch {}
+    }
+    // Hook up hidden file input (inline onchange calls this)
+    window.handleFileSelect = async (e) => {
+        const f = e?.target?.files?.[0];
+        if (!f) return;
+        await setSingleImageFromFile(f);
+    };
+    
+    // Document upload handler - separate from image handling
+    window.handleDocumentSelect = async (e) => {
+        const f = e?.target?.files?.[0];
+        if (!f) return;
+        
+        console.log('Document selected:', f.name, f.type, f.size);
+        
+        // Validate document file
+        const v = validateDocumentFile(f);
+        if (!v.ok) { 
+            alert(v.error); 
+            e.target.value = ''; // Clear the input
+            return; 
+        }
+        
+        try {
+            // Show processing message
+            addMessage('system', `📊 Processing document: ${f.name} (${(f.size / 1024).toFixed(1)} KB)...`, true);
+            
+            // Send document to Document Handler workflow
+            await processDocumentFile(f);
+            
+        } catch (error) {
+            console.error('Document processing error:', error);
+            addMessage('system', `❌ Error processing document: ${error.message}`, true);
+        }
+        
+        // Clear the input for next use
+        e.target.value = '';
+    };
+    
+    // Drag & drop wiring
+    if (dropAreaEl) {
+        ['dragenter','dragover'].forEach(ev => dropAreaEl.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation(); dropAreaEl.classList.add('dragover');
+        }));
+        ['dragleave','drop'].forEach(ev => dropAreaEl.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation(); dropAreaEl.classList.remove('dragover');
+        }));
+        dropAreaEl.addEventListener('drop', async (e) => {
+            const f = e.dataTransfer?.files?.[0];
+            if (f) await setSingleImageFromFile(f);
+        });
+    }
+    // Paste-from-clipboard support
+    if (chatInput) {
+        chatInput.addEventListener('paste', async (e) => {
+            const items = e.clipboardData?.items || [];
+            for (const it of items) {
+                if (it.kind === 'file') {
+                    const f = it.getAsFile();
+                    if (f) { await setSingleImageFromFile(f); break; }
+                }
+            }
+        });
+    }
+
+    // Personas: defaults + optional custom set from localStorage.
+    const DEFAULT_PERSONAS = [
+        { key: 'dev_assistant', label: 'Developer Assistant (A)', content: 'You are a concise developer assistant. Return the smallest correct answer. Prefer code-only when obvious. No flourish.', active: true },
+        { key: 'biz_analyst', label: 'Business Analyst (B)', content: 'You are a concise business analyst. Answer in brief bullets. No fluff. Use the user\'s terms.', active: true },
+        { key: 'facts_extractor', label: 'Facts Extractor (Default)', content: 'You extract terse facts. Only verifiable statements. Respond minimally.', active: true }
+    ];
+
+    function loadCustomPersonas() {
+        try {
+            const raw = localStorage.getItem('custom_personas_v1');
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return [];
+            return arr.filter(p => p && typeof p.key === 'string' && typeof p.label === 'string' && typeof p.content === 'string')
+                      .map(p => ({ ...p, active: p.active !== false }));
+        } catch { return []; }
+    }
+
+    function saveCustomPersonas(arr) {
+        try { localStorage.setItem('custom_personas_v1', JSON.stringify(arr || [])); } catch {}
+    }
+
+    function getAllPersonas() {
+        // Merge by key: custom overrides defaults; keep only active=true.
+        const byKey = {};
+        DEFAULT_PERSONAS.forEach(p => { if (p && p.key) byKey[p.key] = { ...p }; });
+        loadCustomPersonas().forEach(p => { if (p && p.key) byKey[p.key] = { ...p }; });
+        return Object.values(byKey).filter(p => p.active !== false);
+    }
+
+    function populatePersonaDropdown(selectEl) {
+        if (!selectEl) return;
+        selectEl.innerHTML = '';
+        const personas = getAllPersonas();
+        personas.forEach((p, i) => {
+            const opt = document.createElement('option');
+            opt.value = p.key;
+            opt.textContent = p.label;
+            if (i === 0) opt.selected = true;
+            selectEl.appendChild(opt);
+        });
+    }
+
+    function personaKeyToContent(key) {
+        const all = getAllPersonas();
+        const p = all.find(x => x.key === key);
+        return p ? p.content : (all[0]?.content || '');
+    }
+
+    // Persona editor rendering (shows defaults + custom overrides)
+    function renderPersonaEditor() {
+        const container = document.getElementById('persona-editor');
+        if (!container) return;
+        // Derive editor rows: include defaults and apply custom overrides by key
+        const customs = loadCustomPersonas();
+        const byKey = {};
+        DEFAULT_PERSONAS.forEach(p => { byKey[p.key] = { ...p, __isDefault: true }; });
+        customs.forEach(p => { byKey[p.key] = { ...byKey[p.key], ...p, __isDefault: false }; });
+        const rows = Object.values(byKey);
+        const mkRow = (p, idx) => `
+            <div class="persona-row" data-index="${idx}" style="border:1px solid #ddd; padding:8px; margin-bottom:8px;">
+                <div style=\"display:flex; gap:10px; align-items:center;\">
+                    <label style=\"min-width:50px;\">Key</label>
+                    <input class=\"pe-key\" type=\"text\" ${p.__isDefault ? 'readonly title=\\"Default keys cannot be changed; create a new persona to override.\\"' : ''} value=\"${(p.key||'').replace(/\\\"/g,'&quot;')}\" placeholder=\"unique_key\" style=\"flex:1;\"/>
+                    <label style=\"min-width:50px;\">Label</label>
+                    <input class=\"pe-label\" type=\"text\" value=\"${(p.label||'').replace(/\\\"/g,'&quot;')}\" placeholder=\"Display label\" style=\"flex:2;\"/>
+                    <label title=\"If unchecked, persona is hidden from dropdowns.\">
+                        <input class=\"pe-active\" type=\"checkbox\" ${p.active === false ? '' : 'checked'} /> Active
+                    </label>
+                    <button type=\"button\" class=\"pe-delete\" ${p.__isDefault ? 'disabled title=\\"Defaults cannot be deleted; override by key instead.\\"' : ''}>Delete</button>
+                </div>
+                <div style=\"margin-top:6px;\">
+                    <textarea class=\"pe-content\" rows=\"4\" style=\"width:100%;\" placeholder=\"System prompt content...\">${(p.content||'').replace(/</g,'&lt;')}</textarea>
+                </div>
+            </div>`;
+        container.innerHTML = rows.map((p, i) => mkRow(p, i)).join('');
+        // Wire delete buttons to remove from custom store only
+        container.querySelectorAll('.pe-delete').forEach((btn, i) => {
+            btn.addEventListener('click', () => {
+                const key = container.querySelectorAll('.persona-row')[i].querySelector('.pe-key')?.value;
+                if (!key) return;
+                const arr = loadCustomPersonas().filter(p => p.key !== key);
+                saveCustomPersonas(arr);
+                renderPersonaEditor();
+            });
+        });
+    }
+
+    function addPersonaRow() {
+        const arr = loadCustomPersonas();
+        arr.push({ key: '', label: '', content: '', active: true });
+        saveCustomPersonas(arr);
+        renderPersonaEditor();
+    }
+
+    // Collect only custom personas (diff vs defaults) to save
+    function collectPersonaEditor() {
+        const container = document.getElementById('persona-editor');
+        if (!container) return loadCustomPersonas();
+        const rows = Array.from(container.querySelectorAll('.persona-row'));
+        const out = [];
+        rows.forEach(row => {
+            const key = row.querySelector('.pe-key')?.value?.trim();
+            const label = row.querySelector('.pe-label')?.value?.trim();
+            const content = row.querySelector('.pe-content')?.value ?? '';
+            const active = row.querySelector('.pe-active')?.checked !== false;
+            if (!key) return;
+            const def = DEFAULT_PERSONAS.find(d => d.key === key);
+            const candidate = { key, label: label || '', content: content || '', active };
+            if (!def) {
+                // brand-new persona
+                if (label && content) out.push(candidate);
+                return;
+            }
+            // only save if different from default
+            const changed = (def.label !== candidate.label) || (def.content !== candidate.content) || (def.active !== candidate.active);
+            if (changed) out.push(candidate);
+        });
+        return out;
+    }
+
+    // Persist per-project persona choice locally; server mapping optional.
+    function saveProjectPersona(projectId, personaKey) {
+        if (!projectId || !personaKey) return;
+        try {
+            const map = JSON.parse(localStorage.getItem('project_personas') || '{}');
+            map[projectId] = personaKey;
+            localStorage.setItem('project_personas', JSON.stringify(map));
+        } catch {}
+    }
+    function loadProjectPersona(projectId) {
+        try {
+            const map = JSON.parse(localStorage.getItem('project_personas') || '{}');
+            return map[projectId] || null;
+        } catch { return null; }
+    }
+
+    function saveState() {
+        // Save the active IDs to sessionStorage
+        sessionStorage.setItem('lastChatId_v2', currentChatId);
+        sessionStorage.setItem('lastRagId_v2', currentRagId);
+        sessionStorage.setItem('lastProjectId_v2', currentProjectId);
+
+        // Safety check: Always stringify sessions, never store a plain object
+        let sessionsToStore = sessions;
+        if (typeof sessionsToStore !== 'string') {
+            try {
+                sessionsToStore = JSON.stringify(sessionsToStore);
+            } catch (e) {
+                console.error('Failed to stringify sessions object:', e);
+                sessionsToStore = '{}';
+            }
+        }
+        sessionStorage.setItem('chatSessions_v2', sessionsToStore);
+    }
+
+    function loadState() {
+        try {
+            // Get all items from sessionStorage
+            const savedChatId = sessionStorage.getItem('lastChatId_v2');
+            const savedRagId = sessionStorage.getItem('lastRagId_v2');
+            const savedProjectId = sessionStorage.getItem('lastProjectId_v2');
+            const savedSessions = sessionStorage.getItem('chatSessions_v2');
+
+            // Check for the '[object Object]' corruption bug
+            if ([savedChatId, savedRagId, savedProjectId, savedSessions].includes('[object Object]')) {
+                throw new Error("Corrupted '[object Object]' string found in sessionStorage.");
+            }
+
+            // Restore state if the items exist
+            if (savedChatId) currentChatId = savedChatId;
+            // Allow ragId to be null
+            currentRagId = savedRagId || null; 
+            if (savedProjectId) currentProjectId = savedProjectId;
+            if (savedSessions) sessions = JSON.parse(savedSessions);
+
+        } catch (error) {
+            // Safety net: If anything goes wrong, log it, wipe storage, and reset state.
+            console.error("Corrupted or invalid state detected. Clearing storage and resetting.", error);
+            sessionStorage.clear();
+            currentChatId = null;
+            currentProjectId = null;
+            currentRagId = null;
+            sessions = {};
+        }
+    }
+    
+    function updateStatus(message, isError = false) {
+        statusMessage.textContent = message;
+        statusMessage.style.color = isError ? 'red' : '#1976d2';
+        statusMessage.style.display = message ? 'block' : 'none';
+    }
+
+    function showToast(msg, type = 'info', timeoutMs = 3000) {
+        if (!showCommitToasts || !toastEl) return;
+        toastEl.className = '';
+        toastEl.classList.add(type);
+        toastEl.id = 'toast';
+        toastEl.textContent = msg;
+        toastEl.style.display = 'block';
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => {
+            toastEl.style.display = 'none';
+        }, timeoutMs);
+    }
+
+    function openConfig() {
+        console.log('Config button clicked - opening enhanced panel');
+        // Load current settings into the sidebar panel
+        const panel = document.getElementById('config-panel');
+        
+        if (!panel) {
+            console.error('Config panel not found!');
+            return;
+        }
+        
+        // Load checkbox settings
+        document.getElementById('cfg-show-toasts').checked = !!showCommitToasts;
+        document.getElementById('cfg-auto-commit').checked = false; // Disabled for now
+        document.getElementById('cfg-debug-mode').checked = false; // TODO: Add debug mode support
+        document.getElementById('cfg-vision-auto').checked = true; // TODO: Add auto-vision support
+        
+        // Load model selections from localStorage or defaults
+        try {
+            document.getElementById('cfg-default-model').value = localStorage.getItem('cfg_default_model') || 'claude-4-sonnet';
+            document.getElementById('cfg-vision-model').value = localStorage.getItem('cfg_vision_model') || 'gpt-4o';
+            document.getElementById('cfg-code-model').value = localStorage.getItem('cfg_code_model') || 'claude-4-sonnet';
+            document.getElementById('cfg-strategy-model').value = localStorage.getItem('cfg_strategy_model') || 'claude-4-sonnet';
+        } catch {}
+        
+        // Load database branch
+        document.getElementById('cfg-database-branch').value = getCurrentDatabaseBranch();
+        updateBranchStatus(getCurrentDatabaseBranch());
+        
+        // Show the panel
+        panel.classList.add('active');
+        console.log('Config panel should now be visible');
+        renderPersonaEditor();
+    }
+
+    function closeConfig() {
+        const panel = document.getElementById('config-panel');
+        panel.classList.remove('active');
+    }
+
+    function updateBranchStatus(branchName) {
+        const statusText = document.getElementById('branch-status-text');
+        if (branchName === 'main') {
+            statusText.textContent = 'Production - Clean environment';
+            statusText.className = 'status-production';
+        } else {
+            statusText.textContent = 'Testing - Safe for experiments';
+            statusText.className = 'status-testing';
+        }
+    }
+
+    function getCurrentDatabaseBranch() {
+        // TODO: Implement actual branch detection
+        return 'main'; // Default to main for now
+    }
+
+    function getCurrentSelectedModel() {
+        // Get the selected model from the config panel, with fallback
+        try {
+            const defaultModelSelect = document.getElementById('cfg-default-model');
+            console.log('🔍 Model Selection Debug:', {
+                element: defaultModelSelect,
+                value: defaultModelSelect?.value,
+                hasValue: !!(defaultModelSelect && defaultModelSelect.value),
+                localStorage: localStorage.getItem('cfg_default_model')
+            });
+            
+            if (defaultModelSelect && defaultModelSelect.value) {
+                console.log('✅ Using dropdown value:', defaultModelSelect.value);
+                return defaultModelSelect.value;
+            }
+        } catch (e) {
+            console.error('❌ Error reading dropdown:', e);
+        }
+        
+        // Fallback to saved preference or default
+        try {
+            const saved = localStorage.getItem('cfg_default_model');
+            if (saved) {
+                console.log('📦 Using saved value:', saved);
+                return saved;
+            }
+        } catch (e) {
+            console.error('❌ Error reading localStorage:', e);
+        }
+        
+        // Ultimate fallback - changed to claude-4-sonnet
+        console.log('🔄 Using fallback: claude-4-sonnet');
+        return 'claude-4-sonnet';
+    }
+
+    function getModelTypeFromContext(message, hasImage) {
+        // Smart context detection for future intelligent routing
+        if (hasImage) return 'vision';
+        
+        const msgLower = message.toLowerCase();
+        
+        // Code-related keywords
+        if (/\b(code|function|class|python|javascript|typescript|react|css|html|sql|database|api|debug|error|syntax)\b/.test(msgLower)) {
+            return 'code';
+        }
+        
+        // Strategic planning keywords  
+        if (/\b(strategy|business|plan|roadmap|market|growth|revenue|competition|analysis|framework)\b/.test(msgLower)) {
+            return 'strategy';
+        }
+        
+        // Default to general chat
+        return 'default';
+    }
+
+    function loadConfig() {
+        try {
+            const v = localStorage.getItem('cfg_show_toasts');
+            if (v !== null) showCommitToasts = v === 'true';
+        } catch {}
+    }
+
+    function saveConfig() {
+        // Save basic settings
+        showCommitToasts = !!document.getElementById('cfg-show-toasts').checked;
+        try { localStorage.setItem('cfg_show_toasts', String(showCommitToasts)); } catch {}
+        
+        // Save model selections
+        try {
+            localStorage.setItem('cfg_default_model', document.getElementById('cfg-default-model').value);
+            localStorage.setItem('cfg_vision_model', document.getElementById('cfg-vision-model').value);
+            localStorage.setItem('cfg_code_model', document.getElementById('cfg-code-model').value);
+            localStorage.setItem('cfg_strategy_model', document.getElementById('cfg-strategy-model').value);
+        } catch {}
+        
+        // Save database branch preference
+        try {
+            localStorage.setItem('cfg_database_branch', document.getElementById('cfg-database-branch').value);
+        } catch {}
+        
+        // Save feature toggles
+        try {
+            localStorage.setItem('cfg_debug_mode', document.getElementById('cfg-debug-mode').checked);
+            localStorage.setItem('cfg_vision_auto', document.getElementById('cfg-vision-auto').checked);
+        } catch {}
+        
+        // Persist personas from editor
+        const edited = collectPersonaEditor();
+        // ensure unique by key (last wins)
+        const seen = new Set();
+        const dedup = [];
+        for (let i = edited.length - 1; i >= 0; i--) {
+            const p = edited[i];
+            if (!seen.has(p.key)) { seen.add(p.key); dedup.unshift(p); }
+        }
+        saveCustomPersonas(dedup);
+        
+        // Refresh persona dropdowns
+        populatePersonaDropdown(personaSelectSimple);
+        populatePersonaDropdown(personaSelectUrl);
+        
+        
+        closeConfig();
+        showToast('Configuration saved successfully! Model selections and features updated.', 'success', 2500);
+    }
+
+    // Lightweight progress helpers (reuse top progress bar)
+    function showProgress(label = 'Working...') {
+        try {
+            if (progressBarLabel) progressBarLabel.textContent = label;
+            if (progressBar) progressBar.style.display = 'block';
+        } catch {}
+    }
+    function hideProgress() {
+        try {
+            if (progressBar) progressBar.style.display = 'none';
+        } catch {}
+    }
+
+    // Lightweight debug helpers
+    function setDebug(payload, responseMetaOrBody) {
+        if (!debugTray) return;
+        const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+        let metaShown;
+        try {
+            if (responseMetaOrBody && typeof responseMetaOrBody === 'object' && ('status' in responseMetaOrBody || 'headers' in responseMetaOrBody || 'body' in responseMetaOrBody)) {
+                metaShown = JSON.stringify(responseMetaOrBody, null, 2);
+            } else {
+                metaShown = JSON.stringify(responseMetaOrBody, null, 2);
+            }
+        } catch { metaShown = String(responseMetaOrBody); }
+        debugTray.innerText = `Last payload ->\n${payloadStr}\n\nLast response <-\n${metaShown}`;
+    }
+    function buildDebugBadge(data){
+        try{
+            if(!data||typeof data!=="object") return null;
+            const model = data.selected_model || '';
+            const ri = data.rag_info || {};
+            const cm = Number(ri.committed_count||0);
+            const rc = Number(ri.chunk_count||0);
+            if(!model && !ri) return null;
+            const el = document.createElement('span');
+            el.className = 'debug-badge';
+            const ragPart = (cm||rc) ? ` • RAG ${cm}/${rc}` : '';
+            el.textContent = `${model||'model?'}${ragPart}`;
+            try{ el.title = `model=${model||'unknown'}; rag_info=${JSON.stringify(ri)}`; }catch{}
+            el.addEventListener('click',()=>{
+                try{ document.getElementById('debug-toggle')?.click(); }catch{}
+            });
+            return el;
+        }catch{ return null; }
+    }
+    if (debugToggle) {
+        debugToggle.addEventListener('click', () => {
+            if (!debugTray) return;
+            debugTray.style.display = (debugTray.style.display === 'block') ? 'none' : 'block';
+        });
+    }
+
+    // Robust fetch with timeout and a single retry for transient network errors
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const resp = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(id);
+            return resp;
+        } catch (err) {
+            clearTimeout(id);
+            throw err;
+        }
+    }
+
+    async function fetchJsonWithRetry(url, options = {}, timeoutMs = 45000) {
+        try {
+            const resp = await fetchWithTimeout(url, options, timeoutMs);
+            return resp;
+        } catch (err) {
+            // Retry once on transient network failure
+            const msg = String(err?.message || err);
+            if (msg.includes('Failed to fetch') || err?.name === 'AbortError' || msg.includes('NetworkError')) {
+                await new Promise(r => setTimeout(r, 800));
+                return fetchWithTimeout(url, options, timeoutMs);
+            }
+            throw err;
+        }
+    }
+
+    // Read JSON safely even if servers occasionally return text/html or plain text.
+    async function readJsonSafe(response) {
+        try {
+            // Handle explicit no-content
+            const status = Number(response?.status || 0);
+            if (status === 204) return {};
+
+            const ct = (response.headers && response.headers.get('content-type')) || '';
+            // Some proxies/gateways misreport content-length; always attempt JSON first when content-type is JSON
+            if (ct.includes('application/json') || ct.includes('application/vnd.api+json')) {
+                try {
+                    const json = await response.json();
+                    // If parsing worked, return it even if headers claimed length 0
+                    if (json !== undefined) return json;
+                } catch {
+                    // fall through to text
+                }
+            }
+            // Fallback: read as text and best-effort parse
+            const text = await response.text();
+            try {
+                const trimmed = (text || '').trim();
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                    return JSON.parse(trimmed);
+                }
+            } catch {}
+            return text;
+        } catch (e) {
+            // Final fallback to avoid crashing callers
+            console.warn('readJsonSafe: failed to parse response; returning empty object.', e);
+            return {};
+        }
+    }
+
+    // Attempt to read an attached image URL (preferred) or inline data as fallback
+    function getAttachedImageUrl() {
+        if (currentImageUrl) return currentImageUrl;
+        try {
+            const imgEl = previewEl?.querySelector('img');
+            if (imgEl && imgEl.src && imgEl.src.startsWith('http')) return imgEl.src;
+        } catch {}
+        return null;
+    }
+    // Attempt to read an attached image from state or the DOM preview as a fallback
+    function getAttachedImageData() {
+        if (currentImageData && currentImageData.dataUri) return currentImageData;
+        try {
+            const imgEl = previewEl?.querySelector('img');
+            if (imgEl && imgEl.src && imgEl.src.startsWith('data:image/')) {
+                // Best-effort infer mime/size; size unknown, so leave undefined
+                return { dataUri: imgEl.src, mime: (imgEl.src.split(';')[0] || '').replace('data:','') };
+            }
+        } catch {}
+        return null;
+    }
+
+    function setSession(chatId, ragId, projectName, projectId) {
+        // Set the live global state variables (normalize empty ragId to null)
+        currentChatId = chatId;
+        currentRagId = ragId || null;
+        currentProjectId = projectId;
+
+        // Update the sessions object for local history
+        if (!sessions[chatId]) {
+            sessions[chatId] = { history: [], projectName: projectName };
+        }
+        sessions[chatId].projectName = projectName;
+    }
+
+    async function handleCreateIndexProject() {
+        const jsonUrl = newProjectJsonUrlInput.value.trim();
+        const projectName = newProjectNameFromUrlInput.value.trim();
+        const personaKey = (personaSelectUrl && personaSelectUrl.value) || (getAllPersonas()[0]?.key || 'facts_extractor');
+
+        if (!jsonUrl || !projectName) {
+            alert('Please enter both a JSON URL and a project name.');
+            return;
+        }
+
+        updateStatus(`Creating project "${projectName}" and indexing data from URL...`);
+
+        try {
+            const response = await fetch(RAG_INDEXING_WORKFLOW_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectName: projectName,
+                    jsonUrl: jsonUrl,
+                    // Optional: if backend supports prompt mapping at create time
+                    persona_key: personaKey
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Network response was not ok (${response.status}): ${errorText}`);
+            }
+
+            // Check if response has content before trying to parse JSON
+            const responseText = await response.text();
+            console.log('Raw response from RAG Indexing workflow:', responseText);
+            
+            if (!responseText || responseText.trim() === '') {
+                throw new Error('RAG Indexing workflow returned empty response. The n8n workflow may be disabled or not configured to return data.');
+            }
+
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (parseError) {
+                throw new Error(`Invalid JSON response from RAG Indexing workflow: ${parseError.message}. Response: ${responseText.substring(0, 200)}`);
+            }
+            
+            console.log('Received data from RAG Indexing workflow:', data);
+
+            if (data.project_id && data.session_id && data.rag_session_id) {
+                setSession(data.session_id, data.rag_session_id, projectName, data.project_id);
+                saveProjectPersona(data.project_id, personaKey);
+                saveState();
+
+                newProjectFormsContainer.style.display = 'none';
+                mainChatContainer.style.display = 'block';
+                populateSessionSelector();
+                updateStatus('', false);
+                chat.innerHTML = '';
+                const personaLabel = (getAllPersonas().find(p=>p.key===personaKey)?.label) || personaKey;
+                addMessage('bot', `Project "${projectName}" created and data indexed successfully. Persona: ${personaLabel}.`, true);
+            } else {
+                throw new Error('Workflow response was missing required IDs (project_id, session_id, or rag_session_id).');
+            }
+        } catch (error) {
+            console.error('Error during project creation from URL:', error);
+            updateStatus(error.message, true);
+        }
+    }
+    
+    function initializeUI() {
+        startScreen.style.display = 'none';
+        projectListContainer.style.display = 'none';
+        newProjectFormsContainer.style.display = 'none';
+        mainChatContainer.style.display = 'none';
+
+        // Initialize database branch selector
+        initializeBranchSelector();
+
+        if (currentChatId && currentProjectId) {
+            mainChatContainer.style.display = 'block';
+            const sessionName = sessions[currentChatId]?.projectName || 'Current Session';
+            addMessage('bot', `Resumed session for project "${sessionName}".`, true);
+        } else {
+            startScreen.style.display = 'block';
+        }
+    }
+
+    async function handleCreateSimpleProject() {
+        console.log('Starting handleCreateSimpleProject...');
+        const projectName = newProjectNameInput.value.trim();
+        const personaKey = (personaSelectSimple && personaSelectSimple.value) || (getAllPersonas()[0]?.key || 'facts_extractor');
+        if (!projectName) { alert('Please enter a project name.'); return; }
+        
+        updateStatus(`Creating new project "${projectName}"...`);
+        
+        try {
+            const response = await fetch(SETUP_WORKFLOW_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    projectName: projectName, 
+                    persona_key: personaKey,
+                    database_branch: currentDatabaseBranch,
+                    xata_branch: DATABASE_BRANCHES[currentDatabaseBranch].xata_branch
+                })
+            });
+            if (!response.ok) { throw new Error(`Network response was not ok (${response.status})`); }
+            
+            const data = await response.json();
+            console.log('Received data from Create Project workflow:', data);
+            
+            if (data.project_id && data.session_id) {
+                // For simple projects, backend may not provide a rag_session_id; generate one locally.
+                const newRagId = genRagSessionId();
+                setSession(data.session_id, newRagId, projectName, data.project_id);
+                saveProjectPersona(data.project_id, personaKey);
+                saveState();
+                
+                newProjectFormsContainer.style.display = 'none';
+                mainChatContainer.style.display = 'block';
+                populateSessionSelector(); // Refresh the project list
+                updateStatus('', false);
+                chat.innerHTML = ''; 
+                const personaLabel = (getAllPersonas().find(p=>p.key===personaKey)?.label) || personaKey;
+                addMessage('bot', `Project "${projectName}" created successfully. Persona: ${personaLabel}.`, true);
+            } else { throw new Error('Workflow response was missing project_id or session_id.'); }
+        } catch (error) {
+            console.error('Error during simple project creation:', error);
+            updateStatus(error.message, true);
+        }
+    }
+    
+    let isSending = false;
+    let requestSeq = 0; // increment per send to ignore stale responses
+    async function sendMessage(e) {
+        if (e) e.preventDefault();
+    const message = chatInput.value.trim();
+    const imageUrl = getAttachedImageUrl();
+    const imageAttachment = imageUrl ? null : getAttachedImageData();
+    // Allow sending if there's either text or an image (URL or inline)
+    if ((!message && !imageUrl && !imageAttachment) || !currentChatId) return;
+        if (isSending) return; // avoid concurrent sends
+        isSending = true;
+        if (sendButton) sendButton.disabled = true;
+
+    // Show the user's message bubble; if an image is attached, render it inline beneath optional text
+    try {
+        const imgSrc = imageUrl || (imageAttachment && imageAttachment.dataUri);
+        if (imgSrc) {
+            const userMd = (message ? (message + '\n\n') : '') + `![image](${imgSrc})`;
+            addMessage('user', mdToHtmlSafe(userMd), true);
+        } else {
+            if (message) {
+                addMessage('user', message, false);
+            } else {
+                addMessage('user', '[Image]', false);
+            }
+        }
+    } catch {
+        addMessage('user', message || '[Image]', false);
+    }
+        chatInput.value = '';
+        
+        let thinkingIndicator = addMessage('bot', '...', false);
+        thinkingIndicator.classList.add('thinking');
+
+        showProgress('Waiting for response...');
+
+        const myReqId = ++requestSeq;
+
+    const payload = {
+            chatInput: message,
+            chat_session_id: currentChatId,
+            project_id: currentProjectId,
+            rag_session_id: currentRagId,
+            imageUrl: imageUrl || undefined,
+            imageData: imageAttachment || undefined,
+            client_req_id: myReqId,
+            // Database branch information for Xata
+            database_branch: currentDatabaseBranch,
+            xata_branch: DATABASE_BRANCHES[currentDatabaseBranch].xata_branch,
+            // Model selection information
+            selected_model: getCurrentSelectedModel(), // Use actual dropdown selection
+            model_type: getModelTypeFromContext(message || '', !!(imageUrl || imageAttachment)),
+            // Inject system prompt content from local persona selection if present
+            system_prompt_content: (() => {
+                const key = loadProjectPersona(currentProjectId);
+                return key ? personaKeyToContent(key) : undefined;
+            })()
+        };
+
+        console.log('Sending payload to CHAT_WORKFLOW_URL:', JSON.stringify(payload, null, 2));
+        console.log('🤖 Model Selection Info:');
+        console.log('- Selected Model:', payload.selected_model);
+        console.log('- Detected Type:', payload.model_type);
+        console.log('- Has Image:', !!(imageUrl || imageAttachment));
+
+        try {
+            const chatUrl = CHAT_WORKFLOW_URL + `?_ts=${Date.now()}&chat_session_id=${encodeURIComponent(currentChatId||'')}&rag_session_id=${encodeURIComponent(currentRagId||'')}`;
+            // Use a single long-timeout request to avoid duplicate runs from retries when the backend is slow
+            const response = await fetchWithTimeout(chatUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload),
+                cache: 'no-store'
+            }, 25000);
+            if (!response.ok) {
+                let bodyText = '';
+                try { bodyText = await response.text(); } catch {}
+                throw new Error(`HTTP ${response.status}${bodyText ? `: ${bodyText.slice(0,180)}` : ''}`);
+            }
+
+            const data = await readJsonSafe(response);
+            console.log('CHAT response JSON:', data);
+            // Collect headers for debug
+            const headersObj = {};
+            try { response.headers.forEach((v, k) => { headersObj[k] = v; }); } catch {}
+            setDebug(payload, { status: response.status, headers: headersObj, body: data });
+
+            // Ignore stale/out-of-order responses
+            if (myReqId !== requestSeq) {
+                console.warn('Stale response ignored. myReqId=', myReqId, 'latest=', requestSeq);
+                return;
+            }
+
+            // Prefer explicit reply; fall back to common shapes if needed
+            let reply = undefined;
+            if (data && typeof data === 'object') {
+                reply = data.reply
+                     ?? data.text
+                     ?? data.message
+                     ?? (Array.isArray(data.choices) && data.choices[0]?.message?.content)
+                     ?? (typeof data.output_text === 'string' ? data.output_text : undefined);
+            } else if (typeof data === 'string') {
+                reply = data;
+            }
+
+            if (!reply) {
+                console.warn('No reply field in response. Raw response:', data);
+                // Provide a richer fallback with a truncated snapshot of the body for diagnostics
+                let snapshot = '';
+                try {
+                    if (typeof data === 'string') {
+                        snapshot = data.slice(0, 400);
+                    } else if (data && typeof data === 'object') {
+                        snapshot = JSON.stringify(data, null, 2).slice(0, 600);
+                    }
+                } catch {}
+                const statusHint = (response && typeof response.status === 'number') ? ` (HTTP ${response.status})` : '';
+                reply = `[No reply returned from server${statusHint}]` + (snapshot ? `\n\nRaw body:\n${snapshot}` : '');
+                // Also surface a small toast to highlight the anomaly
+                try { showToast('No reply in server response', 'error'); } catch {}
+            }
+
+            // Replace the typing indicator IN PLACE (render Markdown safely)
+            try {
+                thinkingIndicator.innerHTML = mdToHtmlSafe(reply);
+                thinkingIndicator.classList.remove('thinking');
+                // Attach a small debug badge (model + RAG summary)
+                const badge = buildDebugBadge(data);
+                if (badge) thinkingIndicator.appendChild(badge);
+            } catch {
+                const el = addMessage('bot', mdToHtmlSafe(reply), true);
+                const badge = buildDebugBadge(data);
+                if (badge && el && el.appendChild) el.appendChild(badge);
+            }
+
+            // If backend provided a toast (e.g., auto-commit), show it
+            if (data.toast) {
+                showToast(data.toast, 'success');
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+            const emsg = (error?.name === 'AbortError') ? 'Request timed out. Please try again.' : (error?.message || 'Network error');
+            try {
+                thinkingIndicator.textContent = `Error: ${emsg}`;
+                thinkingIndicator.classList.remove('thinking');
+                thinkingIndicator.style.color = 'red';
+            } catch {}
+            try {
+                // Surface a toast so the user gets immediate feedback
+                showToast(emsg, (error?.name === 'AbortError') ? 'warning' : 'error');
+            } catch {}
+        } finally {
+            hideProgress();
+            isSending = false;
+            if (sendButton) sendButton.disabled = false;
+            // Clear any attached image after send
+            try { clearSingleImage(); } catch {}
+        }
+    }
+
+    async function commitToMemory() {
+        console.log('Commit to Memory called.');
+        // Basic guards
+        if (!currentProjectId || !currentChatId) {
+            try { showToast('Select a project before committing to memory.', 'error', 2500); } catch {}
+            return;
+        }
+        // Ensure we have a rag id; this keeps writes and later reads aligned
+        ensureRagId();
+        const allMessages = Array.from(chat.querySelectorAll('.message'));
+        const lastIdx = (sessions[currentChatId] && sessions[currentChatId].lastCommitIndex) || 0;
+        const newMessages = allMessages.slice(lastIdx);
+        if (newMessages.length === 0) { alert('No new messages to commit.'); return; }
+
+        const messagesToCommit = newMessages.map(msgElement => {
+            const role = msgElement.classList.contains('user-message') ? 'user' : 'assistant';
+            return {
+                role: role,
+                content: msgElement.textContent
+            };
+        });
+        
+        // UI: indicate work in progress and prevent double-clicks
+        const originalBtnText = commitMemoryButton ? commitMemoryButton.textContent : '';
+        if (commitMemoryButton) {
+            commitMemoryButton.disabled = true;
+            commitMemoryButton.textContent = 'Working...';
+        }
+    showProgress('Committing to memory...');
+        updateStatus('Committing to memory...');
+        
+        try {
+            const response = await fetchJsonWithRetry(COMMIT_MEMORY_WORKFLOW_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    chat_session_id: currentChatId,
+                    project_id: currentProjectId,
+                    rag_session_id: currentRagId, // Pass current RAG ID
+                    history: messagesToCommit,
+                    database_branch: currentDatabaseBranch,
+                    xata_branch: DATABASE_BRANCHES[currentDatabaseBranch].xata_branch
+                }),
+                cache: 'no-store'
+            }, 120000); // allow up to 120s for commit to finish
+            if (!response.ok) { throw new Error(`Commit failed: ${await response.text()}`); }
+            
+            // Be tolerant to non-JSON (some gateways strip JSON on success)
+            const data = await readJsonSafe(response);
+
+            // The workflow should return the definitive RAG ID. Trust it and update state.
+            if (data.rag_session_id) {
+                if (data.rag_session_id !== currentRagId) {
+                    console.log(`RAG Session ID updated from ${currentRagId} to ${data.rag_session_id}`);
+                    currentRagId = data.rag_session_id;
+                    saveState(); // Persist the new RAG ID immediately
+                }
+            }
+
+            // Advance per-session high-water mark and persist
+            try {
+                if (!sessions[currentChatId]) sessions[currentChatId] = { history: [], projectName: sessions[currentChatId]?.projectName || '' };
+                sessions[currentChatId].lastCommitIndex = allMessages.length;
+                saveState();
+            } catch {}
+            // Prefer toast/status_line if provided
+            if (data.toast) {
+                showToast(data.toast, 'success');
+            } else {
+                showToast('Memory committed successfully!', 'success');
+            }
+            if (data.status_line) {
+                addMessage('bot', data.status_line);
+            }
+            // Success UI state
+            hideProgress();
+            updateStatus('', false);
+            if (commitMemoryButton) {
+                commitMemoryButton.textContent = 'Commit Successful';
+                setTimeout(() => {
+                    commitMemoryButton.textContent = originalBtnText || 'Commit to Memory';
+                    commitMemoryButton.disabled = false;
+                }, 5000);
+            }
+        } catch (error) {
+            console.error('Error committing memory:', error);
+            hideProgress();
+            const timedOut = (error?.name === 'AbortError');
+            const msg = String(error?.message || '');
+            const netErr = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('TypeError');
+            if (timedOut || netErr) {
+                updateStatus('Commit is still processing in the background. It should complete shortly.', false);
+                showToast('Commit is still processing in the background.', 'info');
+                if (commitMemoryButton) {
+                    commitMemoryButton.textContent = 'Processing in background';
+                    setTimeout(() => {
+                        commitMemoryButton.textContent = originalBtnText || 'Commit to Memory';
+                        commitMemoryButton.disabled = false;
+                    }, 5000);
+                }
+            } else {
+                updateStatus(error.message, true);
+                showToast('Commit failed', 'error');
+                if (commitMemoryButton) {
+                    commitMemoryButton.textContent = 'Commit Failed';
+                    setTimeout(() => {
+                        commitMemoryButton.textContent = originalBtnText || 'Commit to Memory';
+                        commitMemoryButton.disabled = false;
+                    }, 5000);
+                }
+            }
+        }
+    }
+
+    async function handleContinueClick() {
+        // --- THE FINAL FIX: Ensure state is loaded before proceeding ---
+        loadState();
+        startScreen.style.display = 'none';
+        projectListContainer.style.display = 'block';
+        const loader = document.getElementById('project-list-loader');
+        loader.style.display = 'block';
+        projectSelectDropdown.style.display = 'none'; // Hide dropdown until populated
+        try {
+            const response = await fetch(LIST_PROJECTS_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                action: 'list_projects' 
+              })
+            });
+            if (!response.ok) { throw new Error(`Failed to fetch projects: ${response.statusText}`); }
+            const data = await response.json(); // Get the full object { "projects": [...] }
+            populateProjectList(data.projects); // Pass the array inside to the function
+            loader.style.display = 'none';
+            projectSelectDropdown.style.display = 'block';
+        } catch (error) {
+            console.error('Error loading projects:', error);
+            loader.textContent = `Error: ${error.message}`;
+            loader.style.color = 'red';
+        }
+    }
+
+    function populateProjectList(projects) {
+        projectSelectDropdown.innerHTML = '<option value="">-- Select a Project --</option>';
+        if (projects && projects.length > 0) {
+            projects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.project_id;
+                option.textContent = project.project_name;
+                
+                // Embed ALL required IDs into the dataset for later retrieval
+                option.dataset.sessionId = project.session_id || ''; 
+                option.dataset.ragSessionId = project.rag_session_id || ''; 
+
+                projectSelectDropdown.appendChild(option);
+            });
+        } else {
+            projectSelectDropdown.innerHTML = '<option value="">-- No projects found --</option>';
+        }
+    }
+
+    function handleProjectSelection() {
+        const selectedOption = projectSelectDropdown.options[projectSelectDropdown.selectedIndex];
+        if (!selectedOption.value) {
+            return; // User selected the placeholder
+        }
+
+        // Retrieve all necessary IDs from the selected option's data attributes
+        const projectId = selectedOption.value;
+        const sessionId = selectedOption.dataset.sessionId;
+        const ragSessionId = selectedOption.dataset.ragSessionId || null;
+        const projectName = selectedOption.textContent;
+
+        console.log(`Project selected. Project ID: ${projectId}, Session ID: ${sessionId}, RAG ID: ${ragSessionId}`);
+
+        // --- CRITICAL FIX: Update the live global variables ---
+        currentProjectId = projectId;
+        currentChatId = sessionId;
+        currentRagId = ragSessionId;
+
+        // Set the session storage for persistence
+        setSession(sessionId, ragSessionId, projectName, projectId);
+        saveState();
+
+        // Transition the UI to the main chat view
+        projectListContainer.style.display = 'none';
+        mainChatContainer.style.display = 'block';
+        
+        // Clear the chat and add a welcome message
+        chat.innerHTML = '';
+        addMessage('bot', `Resumed project "${projectName}". You can continue your conversation.`);
+    }
+    
+    function showDashboard() {
+        mainChatContainer.style.display = 'none';
+        dashboardContainer.style.display = 'block';
+        renderDashboard();
+    }
+
+    function hideDashboard() {
+        dashboardContainer.style.display = 'none';
+        mainChatContainer.style.display = 'block';
+    }
+
+    async function renderDashboard() {
+        dashboardContent.innerHTML = '<p>Loading projects from local file...</p>';
+        try {
+            // Fetch local file. Note: This requires running the HTML from a local web server (like VS Code's Live Server)
+            // due to browser security policies (CORS). Opening the file directly might fail.
+            const response = await fetch('projects_db.json'); 
+            if (!response.ok) {
+                throw new Error(`Could not load projects_db.json. Status: ${response.statusText}. Ensure it's in the same folder and you're using a local server.`);
+            }
+            
+            const projects = await response.json(); // The file itself is the JSON array
+
+            if (projects && projects.length > 0) {
+                dashboardContent.innerHTML = ''; // Clear the loading message
+                projects.forEach(project => {
+                    const card = document.createElement('div');
+                    card.className = 'project-card';
+
+                    // Handle the new tiered backlog structure
+                    let backlogHtml = '<h3>Backlog</h3>';
+                    if (project.backlog && typeof project.backlog === 'object') {
+                        const tiers = ['completed', 'tier1', 'tier2', 'tier3'];
+                        let hasItems = false;
+                        tiers.forEach(tier => {
+                            if (project.backlog[tier] && project.backlog[tier].length > 0) {
+                                hasItems = true;
+                                const tierTitle = tier.charAt(0).toUpperCase() + tier.slice(1);
+                                backlogHtml += `<h4>${tierTitle}</h4><ul>`;
+                                backlogHtml += project.backlog[tier].map(item => `<li><b>${item.title}</b>: ${item.description}</li>`).join('');
+                                backlogHtml += `</ul>`;
+                            }
+                        });
+                        if (!hasItems) {
+                            backlogHtml += '<p>No backlog items.</p>';
+                        }
+                    } else {
+                        backlogHtml += '<p>No backlog information available.</p>';
+                    }
+
+                    card.innerHTML = `
+                        <h2>${project.projectName || 'Unnamed Project'}</h2>
+                        <p class="project-status">Status: ${project.status || 'N/A'}</p>
+                        <p class="project-synopsis">${project.synopsis || 'No synopsis available.'}</p>
+                        <div class="backlog-section">
+                            ${backlogHtml}
+                        </div>
+                    `;
+                    dashboardContent.appendChild(card);
+                });
+            } else {
+                dashboardContent.innerHTML = '<p>No projects found in projects_db.json.</p>';
+            }
+        } catch (error) {
+            console.error('Error rendering dashboard:', error);
+            dashboardContent.innerHTML = `<p style="color: red;">Error loading dashboard: ${error.message}</p>`;
+        }
+    }
+    
+    function getVersionFromFileName() {
+        try {
+            const url = window.location.pathname;
+            const fileName = url.substring(url.lastIndexOf('/') + 1); // e.g., "Chat_8_V7.5.html"
+            
+            // Return a default if the filename is unexpected
+            if (!fileName || !fileName.includes('.html')) {
+                return "Chat App";
+            }
+
+            // Clean up the name for display
+            let displayName = fileName
+                .replace('.html', '')      // Remove extension
+                .replace(/_/g, ' ')        // Replace underscores with spaces
+                .replace(/ V(\d)/g, ' V$1') // Ensure space before version number
+                .replace(/Chat (\d)/, 'Chat $1'); // Ensure space in "Chat 8"
+            
+            return displayName; // e.g., "Chat 8 V7.5"
+        } catch (e) {
+            console.error("Could not determine version from filename:", e);
+            return "Chat App"; // Fallback title
+        }
+    }
+
+    function displayVersion() {
+        const versionString = getVersionFromFileName();
+        document.title = versionString; // Update browser tab title
+        if (versionDisplay) {
+            versionDisplay.textContent = versionString; // Update display element
+            versionDisplay.addEventListener('click', () => {
+                alert(`You are running: ${versionString}`);
+            });
+        }
+    }
+
+    // Add other handler functions here if they exist (e.g., handleContinueClick, handleLoadProject)
+
+    async function populateSessionSelector() {
+        try {
+            const response = await fetch(LIST_PROJECTS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'list_projects',
+                    database_branch: currentDatabaseBranch,
+                    xata_branch: DATABASE_BRANCHES[currentDatabaseBranch].xata_branch
+                })
+            });
+            if (!response.ok) { throw new Error(`Failed to fetch projects: ${response.statusText}`); }
+            const data = await response.json();
+            const projects = data.projects;
+
+            // Always insert a visible placeholder and select it by default
+            sessionSelect.innerHTML = '<option value="" selected>-- Switch Project --</option>';
+            if (Array.isArray(projects) && projects.length > 0) {
+                projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.project_id;
+                    option.textContent = project.project_name || project.project_id;
+                    option.dataset.sessionId = project.session_id || '';
+                    option.dataset.ragSessionId = project.rag_session_id || '';
+
+                    // If this project is the currently active one, select it
+                    if (project.project_id === currentProjectId) {
+                        option.selected = true;
+                    }
+                    sessionSelect.appendChild(option);
+                });
+            } else {
+                sessionSelect.innerHTML = '<option value="" selected>-- No projects found --</option>';
+            }
+        } catch (error) {
+            console.error('Error populating session selector:', error);
+            sessionSelect.innerHTML = '<option value="" selected>-- Error loading --</option>';
+        }
+    }
+
+    function handleSessionSelection() {
+        const selectedOption = sessionSelect.options[sessionSelect.selectedIndex];
+        if (!selectedOption.value) {
+            return; // User selected the placeholder
+        }
+
+        // Retrieve all necessary IDs from the selected option's data attributes
+        const projectId = selectedOption.value;
+        const sessionId = selectedOption.dataset.sessionId;
+        const ragSessionId = selectedOption.dataset.ragSessionId || null;
+        const projectName = selectedOption.textContent;
+
+        console.log(`Switching project. Project ID: ${projectId}, Session ID: ${sessionId}, RAG ID: ${ragSessionId}`);
+
+        // Update the live global variables and persist the state
+        setSession(sessionId, ragSessionId, projectName, projectId);
+        saveState();
+
+        // Manually reset the chat interface without a page reload
+        chat.innerHTML = '';
+        addMessage('bot', `Switched to project "${projectName}". You can continue your conversation.`);
+        
+        // Optional: You might want to clear the input field as well
+        chatInput.value = '';
+    }
+
+
+    // --- STAGE 3: EVENT LISTENERS & INITIAL LOAD (Run code last) ---
+
+    // Attach listeners to buttons
+    if(createProjectButton) createProjectButton.addEventListener('click', () => { 
+        startScreen.style.display = 'none';
+        newProjectFormsContainer.style.display = 'block'; 
+        newProjectChoiceContainer.style.display = 'block';
+        newProjectSimpleDiv.style.display = 'none';
+        newProjectFromUrlDiv.style.display = 'none';
+        // Prepare persona dropdowns
+        populatePersonaDropdown(personaSelectSimple);
+        populatePersonaDropdown(personaSelectUrl);
+    });
+
+    if(continueProjectButton) continueProjectButton.addEventListener('click', handleContinueClick);
+    if(projectSelectDropdown) projectSelectDropdown.addEventListener('change', handleProjectSelection);
+    
+    if(newProjectChoiceNo) newProjectChoiceNo.addEventListener('click', () => {
+        newProjectChoiceContainer.style.display = 'none';
+        newProjectSimpleDiv.style.display = 'block';
+    });
+    
+    if(newProjectChoiceYes) newProjectChoiceYes.addEventListener('click', () => {
+        newProjectChoiceContainer.style.display = 'none';
+        newProjectFromUrlDiv.style.display = 'block';
+    });
+    
+    if(createSimpleProjectButton) createSimpleProjectButton.addEventListener('click', handleCreateSimpleProject);
+    if(createProjectFromUrlButton) createProjectFromUrlButton.addEventListener('click', handleCreateIndexProject);
+    if(sendButton) sendButton.addEventListener('click', sendMessage);
+    if(chatInput) chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.ctrlKey) {
+            e.preventDefault();
+            sendMessage(e);
+        }
+    });
+    if(commitMemoryButton) commitMemoryButton.addEventListener('click', commitToMemory);
+    if(clearSessionButton) clearSessionButton.addEventListener('click', handleClearSession);
+    if(dashboardBtn) dashboardBtn.addEventListener('click', showDashboard);
+    if(dashboardCloseBtn) dashboardCloseBtn.addEventListener('click', hideDashboard);
+    if(configBtn) configBtn.addEventListener('click', openConfig);
+    if(cfgCancel) cfgCancel.addEventListener('click', closeConfig);
+    if(cfgSave) cfgSave.addEventListener('click', saveConfig);
+    
+    console.log('🔧 Event listeners attached:');
+    console.log('- configBtn:', !!configBtn);
+    console.log('- cfgCancel:', !!cfgCancel); 
+    console.log('- cfgSave:', !!cfgSave);
+    
+    // Enhanced configuration panel event listeners
+    const configCloseBtn = document.getElementById('config-close-btn');
+    
+    if(configCloseBtn) configCloseBtn.addEventListener('click', closeConfig);
+    
+    // Section collapse/expand functionality
+    document.querySelectorAll('.config-section-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const section = header.parentElement;
+            const toggle = header.querySelector('.config-section-toggle');
+            
+            section.classList.toggle('collapsed');
+            toggle.textContent = section.classList.contains('collapsed') ? '▶' : '▼';
+        });
+    });
+
+    // Model selection change handlers
+    const defaultModelSelect = document.getElementById('cfg-default-model');
+    const databaseBranchSelect = document.getElementById('cfg-database-branch');
+    
+    if(defaultModelSelect) {
+        defaultModelSelect.addEventListener('change', (e) => {
+            console.log('Default model changed to:', e.target.value);
+            // Save the model selection to localStorage
+            localStorage.setItem('cfg_default_model', e.target.value);
+            console.log('Saved model selection:', e.target.value);
+        });
+    }
+    
+    if(databaseBranchSelect) {
+        databaseBranchSelect.addEventListener('change', (e) => {
+            updateBranchStatus(e.target.value);
+            console.log('Database branch changed to:', e.target.value);
+        });
+    }
+    if(personaAddBtn) personaAddBtn.addEventListener('click', addPersonaRow);
+    if(sessionSelect) sessionSelect.addEventListener('change', handleSessionSelection);
+    
+    // Initial page load sequence
+    loadState();
+    loadConfig();
+    initializeDefaultModel();
+    initializeUI();
+    displayVersion();
+    // Populate the project switcher dropdown regardless of view; it is harmless when hidden
+    populateSessionSelector();
+});
+
+function handleClearSession() {
+  console.log("Clearing session and resetting application...");
+  
+  // 1. Clear the browser's memory
+    try {
+        // Remove only session-related keys; keep custom personas and config
+        const sessionKeys = [
+            'lastChatId_v2',
+            'lastRagId_v2',
+            'lastProjectId_v2',
+            'chatSessions_v2'
+        ];
+        sessionKeys.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  sessionStorage.clear();
+  
+  // 2. Reset the live state variables to their defaults
+  currentChatId = null;
+  currentProjectId = null;
+  currentRagId = null;
+  sessions = {};
+  
+  // 3. Force the page to reload. It will now start fresh.
+  location.reload();
+}
+
+// Minimal voice input support to avoid runtime errors when clicking the mic
+function startVoice() {
+    try {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert('Speech recognition not supported in this browser.');
+            return;
+        }
+        const rec = new SpeechRecognition();
+        rec.lang = 'en-US';
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        const recInd = document.getElementById('recording');
+        if (recInd) recInd.style.display = 'inline';
+        rec.onresult = (e) => {
+            const t = e.results && e.results[0] && e.results[0][0] && e.results[0][0].transcript;
+            if (t && typeof t === 'string') {
+                const el = document.getElementById('chat-input');
+                if (el) {
+                    el.value = (el.value ? (el.value + ' ') : '') + t.trim();
+                    el.focus();
+                }
+            }
+        };
+        rec.onerror = (e) => {
+            console.warn('Speech recognition error:', e?.error || e);
+        };
+        rec.onend = () => {
+            if (recInd) recInd.style.display = 'none';
+        };
+        rec.start();
+    } catch (e) {
+        console.error('startVoice error:', e);
+        alert('Could not start voice input.');
+    }
+}
+</script>
+
+<!-- hello Mike -->
+<!-- hello from the laptop -->
+</body>
+</html>

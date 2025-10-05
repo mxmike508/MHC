@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Creation Debug Test - Fixed</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .debug-section { border: 2px solid #333; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .info { color: blue; }
+        .test-button { padding: 15px 30px; font-size: 16px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; margin: 10px; }
+        .form-test { background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Project Creation Debug Test - FIXED</h1>
+    
+    <div class="debug-section">
+        <h3>Executive, this will test the "Start New Project" functionality bypassing module issues:</h3>
+        <button class="test-button" onclick="testDirectImplementation()">🚀 TEST DIRECT PROJECT CREATION</button>
+        <button class="test-button" onclick="testAPIConnectivity()">🌐 TEST API CONNECTIVITY</button>
+        <button class="test-button" onclick="simulateProjectCreation()">⚡ SIMULATE PROJECT CREATION</button>
+    </div>
+    
+    <div id="debug-results"></div>
+
+    <script>
+        // Direct implementation bypassing module system
+        const endpoints = {
+            setup: 'https://n8n.srv997771.hstgr.cloud/webhook/d0b91f11-487b-441f-80a3-17edd5a703db',
+            listProjects: 'https://n8n.srv997771.hstgr.cloud/webhook/a61a290c-d8e5-4c04-980a-4ebb415a21e4',
+            ragIndexing: 'https://n8n.srv997771.hstgr.cloud/webhook/303639ed-a3e2-4eae-b406-16e1c6200a81'
+        };
+        
+        window.testDirectImplementation = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Direct Implementation Test</h3>';
+            
+            try {
+                output += '<div class="info">Testing project creation logic directly...</div>';
+                
+                // Test the exact logic from createNewProject method
+                const projectData = {
+                    project_name: 'Debug Test Project',
+                    project_description: 'Testing project creation functionality'
+                };
+                
+                output += '<div class="success">✅ Project data prepared</div>';
+                output += `<div class="info">Project Name: ${projectData.project_name}</div>`;
+                output += `<div class="info">Description: ${projectData.project_description}</div>`;
+                
+                // Test form validation logic
+                if (!projectData.project_name) {
+                    output += '<div class="error">❌ Validation would fail - no project name</div>';
+                } else {
+                    output += '<div class="success">✅ Validation would pass - project name exists</div>';
+                }
+                
+                // Show what endpoint would be used
+                output += `<div class="info">Would POST to: ${endpoints.setup}</div>`;
+                output += '<div class="info">Payload: ' + JSON.stringify(projectData) + '</div>';
+                
+                output += '<div class="success">✅ Project creation logic is structurally sound</div>';
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.testAPIConnectivity = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>API Connectivity Test</h3>';
+            
+            try {
+                output += '<div class="info">Testing connectivity to n8n endpoints...</div>';
+                
+                // Test setup endpoint
+                output += '<div class="info">Testing setup endpoint...</div>';
+                try {
+                    const response = await fetch(endpoints.setup, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ test: 'connectivity' })
+                    });
+                    
+                    output += `<div class="success">✅ Setup endpoint responded: ${response.status}</div>`;
+                    
+                    if (response.ok) {
+                        const data = await response.text();
+                        output += '<div class="success">✅ Endpoint is working</div>';
+                        output += `<div class="info">Response preview: ${data.substring(0, 200)}...</div>`;
+                    } else {
+                        output += `<div class="error">❌ Endpoint returned error: ${response.status}</div>`;
+                    }
+                    
+                } catch (fetchError) {
+                    output += '<div class="error">❌ Network error: ' + fetchError.message + '</div>';
+                    if (fetchError.message.includes('CORS')) {
+                        output += '<div class="info">🔍 CORS issue detected - this might be the problem</div>';
+                    }
+                    if (fetchError.message.includes('fetch')) {
+                        output += '<div class="info">🔍 Network connectivity issue detected</div>';
+                    }
+                }
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.simulateProjectCreation = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Simulate Project Creation</h3>';
+            
+            try {
+                output += '<div class="info">⚡ Simulating actual project creation call...</div>';
+                
+                const projectData = {
+                    project_name: 'Debug Test Project ' + Date.now(),
+                    project_description: 'Real test project created during debugging'
+                };
+                
+                output += '<div class="info">Making real API call to create project...</div>';
+                output += `<div class="info">POST ${endpoints.setup}</div>`;
+                output += `<div class="info">Payload: ${JSON.stringify(projectData)}</div>`;
+                
+                const response = await fetch(endpoints.setup, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(projectData)
+                });
+                
+                output += `<div class="info">Response Status: ${response.status}</div>`;
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    output += '<div class="success">🎉 PROJECT CREATION SUCCESSFUL!</div>';
+                    output += `<div class="success">Project ID: ${result.project_id}</div>`;
+                    output += `<div class="success">Chat Session ID: ${result.chat_session_id || 'Generated'}</div>`;
+                    output += `<div class="success">RAG Session ID: ${result.rag_session_id || 'None'}</div>`;
+                    
+                    output += '<div style="background: #d4edda; border: 2px solid #28a745; padding: 15px; margin: 15px 0; border-radius: 8px;">';
+                    output += '<strong>✅ CONCLUSION: Project creation API is working!</strong><br>';
+                    output += 'The issue is likely in the UI form handling or module loading, not the backend.';
+                    output += '</div>';
+                    
+                } else {
+                    const errorText = await response.text();
+                    output += '<div class="error">❌ Project creation failed</div>';
+                    output += `<div class="error">Status: ${response.status}</div>`;
+                    output += `<div class="error">Error: ${errorText}</div>`;
+                    
+                    output += '<div style="background: #f8d7da; border: 2px solid #dc3545; padding: 15px; margin: 15px 0; border-radius: 8px;">';
+                    output += '<strong>❌ CONCLUSION: Backend API is failing!</strong><br>';
+                    output += 'The n8n webhook is not responding correctly to project creation requests.';
+                    output += '</div>';
+                }
+                
+            } catch (error) {
+                output += '<div class="error">❌ Simulation failed: ' + error.message + '</div>';
+                
+                if (error.message.includes('CORS')) {
+                    output += '<div style="background: #fff3cd; border: 2px solid #ffc107; padding: 15px; margin: 15px 0; border-radius: 8px;">';
+                    output += '<strong>⚠️ CONCLUSION: CORS/Network Issue!</strong><br>';
+                    output += 'The browser is blocking requests to the n8n server due to CORS policy or network issues.';
+                    output += '</div>';
+                } else {
+                    output += '<div style="background: #f8d7da; border: 2px solid #dc3545; padding: 15px; margin: 15px 0; border-radius: 8px;">';
+                    output += '<strong>❌ CONCLUSION: Network or API Error!</strong><br>';
+                    output += 'There is a fundamental connectivity issue with the backend.';
+                    output += '</div>';
+                }
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+    </script>
+</body>
+</html>

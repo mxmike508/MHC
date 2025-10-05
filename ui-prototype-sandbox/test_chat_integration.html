@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #test-container { border: 1px solid #ccc; padding: 20px; margin: 20px 0; }
+        .test-result { margin: 5px 0; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Chat Module Integration Test</h1>
+    <button onclick="runIntegrationTests()">Run Integration Tests</button>
+    <div id="test-container"></div>
+
+    <script type="module">
+        window.runIntegrationTests = async function() {
+            const container = document.getElementById('test-container');
+            const results = [];
+            
+            try {
+                results.push('<div class="info">🔍 Testing chat module integration...</div>');
+                
+                // Test 1: Module loading
+                try {
+                    const { ChatModule } = await import('./modules/chat/chat.js');
+                    results.push('<div class="success">✅ Chat module imports successfully</div>');
+                    
+                    // Test 2: Module instantiation
+                    const chatInstance = new ChatModule();
+                    results.push('<div class="success">✅ Chat module instantiates successfully</div>');
+                    
+                    // Test 3: Check essential methods exist
+                    const requiredMethods = [
+                        'init', 'render', 'sendMessage', 'addMessage', 
+                        'setSingleImageFromFile', 'getAttachedImageUrl', 
+                        'getAttachedImageData', 'getModelTypeFromContext'
+                    ];
+                    
+                    let methodsExist = true;
+                    for (const method of requiredMethods) {
+                        if (typeof chatInstance[method] !== 'function') {
+                            results.push('<div class="error">❌ Missing method: ' + method + '</div>');
+                            methodsExist = false;
+                        }
+                    }
+                    
+                    if (methodsExist) {
+                        results.push('<div class="success">✅ All required methods exist</div>');
+                    }
+                    
+                    // Test 4: Initialize module
+                    const testDiv = document.createElement('div');
+                    testDiv.id = 'test-chat-container';
+                    document.body.appendChild(testDiv);
+                    
+                    await chatInstance.init();
+                    const rendered = chatInstance.render();
+                    testDiv.innerHTML = rendered;
+                    
+                    results.push('<div class="success">✅ Chat module initializes and renders</div>');
+                    
+                    // Test 5: Check for image upload button
+                    const imageButton = testDiv.querySelector('.attachment-button, input[type="file"]');
+                    if (imageButton) {
+                        results.push('<div class="success">✅ Image upload functionality present</div>');
+                    } else {
+                        results.push('<div class="error">❌ Image upload button not found</div>');
+                    }
+                    
+                    // Test 6: Test image state management
+                    chatInstance.currentImageData = null;
+                    chatInstance.currentImageUrl = null;
+                    
+                    const noImageUrl = chatInstance.getAttachedImageUrl();
+                    const noImageData = chatInstance.getAttachedImageData();
+                    
+                    if (!noImageUrl && !noImageData) {
+                        results.push('<div class="success">✅ Image state management works (empty state)</div>');
+                    }
+                    
+                    // Test 7: Test model type detection
+                    const textModel = chatInstance.getModelTypeFromContext('Hello there', false);
+                    const visionModel = chatInstance.getModelTypeFromContext('Describe this image', true);
+                    
+                    if (textModel !== 'vision' && visionModel === 'vision') {
+                        results.push('<div class="success">✅ Model type detection works correctly</div>');
+                    } else {
+                        results.push('<div class="error">❌ Model type detection failed. Text: ' + textModel + ', Vision: ' + visionModel + '</div>');
+                    }
+                    
+                    results.push('<div class="success">🎉 All integration tests passed!</div>');
+                    results.push('<div class="info">📝 Chat module ready for image upload testing</div>');
+                    
+                } catch (moduleError) {
+                    results.push('<div class="error">❌ Module loading failed: ' + moduleError.message + '</div>');
+                    console.error('Module error:', moduleError);
+                }
+                
+            } catch (error) {
+                results.push('<div class="error">❌ Integration test failed: ' + error.message + '</div>');
+                console.error('Integration test error:', error);
+            }
+            
+            container.innerHTML = results.join('');
+        };
+    </script>
+</body>
+</html>

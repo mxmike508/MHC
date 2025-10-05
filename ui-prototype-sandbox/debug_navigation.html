@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .debug-section { border: 2px solid #333; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .info { color: blue; }
+        .test-button { padding: 15px 30px; font-size: 16px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Navigation Debug Test</h1>
+    
+    <div class="debug-section">
+        <h3>Executive, this test will verify the navigation issue:</h3>
+        <button class="test-button" onclick="testNavigation()">🔍 TEST NAVIGATION FUNCTIONALITY</button>
+        <button class="test-button" onclick="testSwitchProjectButton()">🔄 TEST SWITCH PROJECT BUTTON</button>
+    </div>
+    
+    <div id="debug-results"></div>
+
+    <!-- Load chat module directly -->
+    <script type="module" src="./modules/chat/chat.js"></script>
+    
+    <script>
+        window.testNavigation = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Navigation Test Results</h3>';
+            
+            try {
+                // Test 1: Check if chat module loaded
+                output += '<div class="info">Step 1: Checking if chat module is loaded...</div>';
+                
+                if (typeof window.ChatModule !== 'undefined') {
+                    output += '<div class="success">✅ Chat module loaded successfully</div>';
+                } else {
+                    output += '<div class="error">❌ Chat module not available</div>';
+                    throw new Error('ChatModule not available');
+                }
+                
+                // Test 2: Create instance
+                const chat = new window.ChatModule();
+                output += '<div class="success">✅ Chat instance created</div>';
+                
+                // Test 3: Initialize
+                await chat.init();
+                output += '<div class="success">✅ Chat initialized</div>';
+                
+                // Test 4: Check if HTML is rendered
+                const chatHTML = chat.render();
+                if (chatHTML) {
+                    output += '<div class="success">✅ Chat HTML rendered successfully</div>';
+                } else {
+                    output += '<div class="error">❌ Chat HTML not rendered</div>';
+                }
+                
+                // Test 5: Insert HTML and test postRender
+                document.body.insertAdjacentHTML('beforeend', '<div id="test-container" style="display: none;">' + chatHTML + '</div>');
+                
+                await chat.postRender();
+                output += '<div class="success">✅ PostRender executed successfully</div>';
+                
+                // Test 6: Check if switch project button exists
+                const switchBtn = document.getElementById('switchProjectBtn');
+                if (switchBtn) {
+                    output += '<div class="success">✅ Switch Project button found in DOM</div>';
+                    
+                    // Test 7: Check if event listener is attached
+                    const hasListener = switchBtn.onclick || switchBtn._listeners || switchBtn.__events;
+                    if (hasListener) {
+                        output += '<div class="success">✅ Event listener appears to be attached</div>';
+                    } else {
+                        output += '<div class="info">ℹ️ Event listener status unclear (modern events hard to detect)</div>';
+                    }
+                    
+                    // Test 8: Check switchProject method exists
+                    if (typeof chat.switchProject === 'function') {
+                        output += '<div class="success">✅ switchProject method exists</div>';
+                    } else {
+                        output += '<div class="error">❌ switchProject method missing</div>';
+                    }
+                    
+                } else {
+                    output += '<div class="error">❌ Switch Project button NOT found in DOM</div>';
+                }
+                
+                // Cleanup test container
+                const testContainer = document.getElementById('test-container');
+                if (testContainer) testContainer.remove();
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+                output += '<div class="error">Stack: ' + error.stack + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.testSwitchProjectButton = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Switch Project Button Test</h3>';
+            
+            try {
+                // Use the globally loaded ChatModule
+                if (typeof window.ChatModule === 'undefined') {
+                    throw new Error('ChatModule not available');
+                }
+                const chat = new window.ChatModule();
+                await chat.init();
+                
+                // Create a test environment
+                const testDiv = document.createElement('div');
+                testDiv.innerHTML = chat.render();
+                document.body.appendChild(testDiv);
+                
+                await chat.postRender();
+                
+                // Find the switch project button
+                const switchBtn = document.getElementById('switchProjectBtn');
+                
+                if (switchBtn) {
+                    output += '<div class="success">✅ Switch Project button found</div>';
+                    
+                    // Simulate the current state (in chat mode)
+                    chat.currentProjectId = 'test-project';
+                    
+                    // Test the switchProject method directly
+                    output += '<div class="info">Testing switchProject method directly...</div>';
+                    
+                    chat.switchProject();
+                    
+                    // Check if it worked
+                    const projectLauncher = document.getElementById('projectLauncher');
+                    const chatInterface = document.getElementById('chatInterface');
+                    
+                    if (projectLauncher && projectLauncher.style.display !== 'none') {
+                        output += '<div class="success">✅ Project launcher is visible after switch</div>';
+                    } else {
+                        output += '<div class="error">❌ Project launcher not visible after switch</div>';
+                    }
+                    
+                    if (chatInterface && chatInterface.style.display === 'none') {
+                        output += '<div class="success">✅ Chat interface hidden after switch</div>';
+                    } else {
+                        output += '<div class="error">❌ Chat interface not hidden after switch</div>';
+                    }
+                    
+                    if (!chat.currentProjectId) {
+                        output += '<div class="success">✅ Project ID cleared after switch</div>';
+                    } else {
+                        output += '<div class="error">❌ Project ID not cleared after switch</div>';
+                    }
+                    
+                } else {
+                    output += '<div class="error">❌ Switch Project button not found</div>';
+                }
+                
+                // Clean up
+                testDiv.remove();
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+                console.error('Switch project test error:', error);
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+    </script>
+</body>
+</html>

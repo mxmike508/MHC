@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Upload Test - Chat Module</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #test-results { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        #image-preview { max-width: 300px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Chat Module Image Upload Test</h1>
+    
+    <div>
+        <input type="file" id="testImageInput" accept="image/*">
+        <button onclick="testImageUpload()">Test Image Upload</button>
+    </div>
+    
+    <div id="image-preview"></div>
+    
+    <div id="test-results">
+        <h3>Test Results:</h3>
+        <div id="results-content">Click "Test Image Upload" to run tests...</div>
+    </div>
+
+    <script type="module">
+        import { ChatModule } from './modules/chat/chat.js';
+        
+        window.chatModule = new ChatModule();
+        
+        window.testImageUpload = async function() {
+            const results = document.getElementById('results-content');
+            results.innerHTML = '<div class="info">Running image upload tests...</div>';
+            
+            const fileInput = document.getElementById('testImageInput');
+            if (!fileInput.files.length) {
+                results.innerHTML = '<div class="error">Please select an image file first</div>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            let testResults = [];
+            
+            try {
+                // Test 1: Verify file is an image
+                if (!file.type.startsWith('image/')) {
+                    testResults.push('<div class="error">❌ File is not an image type</div>');
+                    return;
+                }
+                testResults.push('<div class="success">✅ File is valid image type: ' + file.type + '</div>');
+                
+                // Test 2: Test setSingleImageFromFile method
+                await window.chatModule.setSingleImageFromFile(file);
+                testResults.push('<div class="success">✅ setSingleImageFromFile() executed successfully</div>');
+                
+                // Test 3: Check image state management
+                const imageUrl = window.chatModule.getAttachedImageUrl();
+                const imageData = window.chatModule.getAttachedImageData();
+                
+                if (imageUrl || imageData) {
+                    testResults.push('<div class="success">✅ Image state managed correctly</div>');
+                    if (imageUrl) testResults.push('<div class="info">   → Image URL: ' + imageUrl.substring(0, 50) + '...</div>');
+                    if (imageData) testResults.push('<div class="info">   → Image Data: ' + imageData.substring(0, 50) + '...</div>');
+                } else {
+                    testResults.push('<div class="error">❌ No image data stored</div>');
+                }
+                
+                // Test 4: Display image preview
+                const preview = document.getElementById('image-preview');
+                if (imageUrl) {
+                    preview.innerHTML = '<img src="' + imageUrl + '" alt="Preview" style="max-width: 300px; border: 1px solid #ccc;">';
+                    testResults.push('<div class="success">✅ Image preview displayed</div>');
+                } else if (imageData) {
+                    preview.innerHTML = '<img src="' + imageData + '" alt="Preview" style="max-width: 300px; border: 1px solid #ccc;">';
+                    testResults.push('<div class="success">✅ Image preview displayed (base64)</div>');
+                }
+                
+                // Test 5: Test model type detection
+                const modelType = window.chatModule.getModelTypeFromContext('Can you describe this image?', true);
+                if (modelType === 'vision') {
+                    testResults.push('<div class="success">✅ Model type correctly detected as "vision"</div>');
+                } else {
+                    testResults.push('<div class="error">❌ Model type not detected as vision: ' + modelType + '</div>');
+                }
+                
+                // Test 6: Test payload creation (simulate)
+                testResults.push('<div class="info">📝 Testing message payload creation...</div>');
+                const testMessage = 'Can you describe this image?';
+                const payload = {
+                    chatInput: testMessage,
+                    imageUrl: imageUrl || undefined,
+                    imageData: imageData || undefined,
+                    model_type: window.chatModule.getModelTypeFromContext(testMessage, !!(imageUrl || imageData))
+                };
+                
+                if (payload.imageUrl || payload.imageData) {
+                    testResults.push('<div class="success">✅ Payload includes image context</div>');
+                    testResults.push('<div class="info">   → Model: ' + payload.model_type + '</div>');
+                } else {
+                    testResults.push('<div class="error">❌ Payload missing image context</div>');
+                }
+                
+            } catch (error) {
+                testResults.push('<div class="error">❌ Error during testing: ' + error.message + '</div>');
+                console.error('Test error:', error);
+            }
+            
+            // Display all results
+            results.innerHTML = testResults.join('');
+        };
+    </script>
+</body>
+</html>

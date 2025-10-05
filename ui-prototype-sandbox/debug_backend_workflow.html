@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Workflow Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1000px; margin: 0 auto; }
+        .debug-section { border: 2px solid #333; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .info { color: blue; }
+        .warning { color: orange; font-weight: bold; }
+        .test-button { padding: 15px 30px; font-size: 16px; background: #ff9800; color: white; border: none; border-radius: 8px; cursor: pointer; margin: 10px; }
+        .response-box { background: #f5f5f5; border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 4px; font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Backend Workflow Debug</h1>
+    
+    <div class="debug-section">
+        <h3>Executive, this will help debug the n8n workflow failure:</h3>
+        <button class="test-button" onclick="testDetailedBackendResponse()">🔍 ANALYZE BACKEND RESPONSE</button>
+        <button class="test-button" onclick="testMultipleRequests()">📊 TEST MULTIPLE REQUESTS</button>
+        <button class="test-button" onclick="testListProjects()">📋 TEST LIST PROJECTS</button>
+    </div>
+    
+    <div id="debug-results"></div>
+
+    <script>
+        const endpoints = {
+            setup: 'https://n8n.srv997771.hstgr.cloud/webhook/d0b91f11-487b-441f-80a3-17edd5a703db',
+            listProjects: 'https://n8n.srv997771.hstgr.cloud/webhook/a61a290c-d8e5-4c04-980a-4ebb415a21e4'
+        };
+        
+        window.testDetailedBackendResponse = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Detailed Backend Response Analysis</h3>';
+            
+            try {
+                output += '<div class="info">🔍 Making detailed project creation request...</div>';
+                
+                const projectData = {
+                    project_name: 'Backend Debug Test ' + Date.now(),
+                    project_description: 'Detailed debugging of n8n workflow failure'
+                };
+                
+                output += `<div class="info">Request payload:</div>`;
+                output += `<div class="response-box">${JSON.stringify(projectData, null, 2)}</div>`;
+                
+                const startTime = Date.now();
+                const response = await fetch(endpoints.setup, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(projectData)
+                });
+                const endTime = Date.now();
+                
+                output += `<div class="info">Response time: ${endTime - startTime}ms</div>`;
+                output += `<div class="info">Status: ${response.status} ${response.statusText}</div>`;
+                output += `<div class="info">Content-Type: ${response.headers.get('content-type')}</div>`;
+                output += `<div class="info">Content-Length: ${response.headers.get('content-length')}</div>`;
+                
+                // Get all response headers
+                output += '<div class="info">Response Headers:</div>';
+                const headerBox = '<div class="response-box">';
+                let headers = '';
+                for (let [key, value] of response.headers.entries()) {
+                    headers += `${key}: ${value}\\n`;
+                }
+                output += headerBox + headers + '</div>';
+                
+                // Get response body
+                const responseText = await response.text();
+                output += `<div class="info">Response Body (${responseText.length} characters):</div>`;
+                output += `<div class="response-box">"${responseText}"</div>`;
+                
+                if (response.ok) {
+                    if (responseText.trim() === '') {
+                        output += '<div class="warning">⚠️ WORKFLOW ISSUE: Empty response indicates n8n workflow stopped early</div>';
+                        output += '<div class="error">🔍 LIKELY CAUSE: "Check if project exists" node failed and workflow terminated</div>';
+                        output += '<div class="info">📋 RECOMMENDED ACTION: Check n8n execution logs for this workflow</div>';
+                    } else {
+                        try {
+                            const parsed = JSON.parse(responseText);
+                            output += '<div class="success">✅ Valid JSON response received</div>';
+                            output += `<div class="response-box">${JSON.stringify(parsed, null, 2)}</div>`;
+                        } catch (e) {
+                            output += '<div class="warning">⚠️ Non-JSON response - might be error message</div>';
+                        }
+                    }
+                } else {
+                    output += '<div class="error">❌ HTTP Error response</div>';
+                }
+                
+            } catch (error) {
+                output += '<div class="error">❌ Request failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.testMultipleRequests = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Multiple Request Test</h3>';
+            
+            output += '<div class="info">🔄 Testing multiple requests to identify patterns...</div>';
+            
+            for (let i = 1; i <= 3; i++) {
+                try {
+                    output += `<div class="info">--- Request ${i} ---</div>`;
+                    
+                    const projectData = {
+                        project_name: `Multi Test ${i} - ${Date.now()}`,
+                        project_description: `Multiple request test #${i}`
+                    };
+                    
+                    const startTime = Date.now();
+                    const response = await fetch(endpoints.setup, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(projectData)
+                    });
+                    const endTime = Date.now();
+                    
+                    const responseText = await response.text();
+                    
+                    output += `<div class="info">Request ${i}: ${response.status} - ${endTime - startTime}ms - ${responseText.length} chars</div>`;
+                    
+                    if (responseText.trim() === '') {
+                        output += `<div class="warning">Request ${i}: Empty response (workflow failure)</div>`;
+                    } else {
+                        output += `<div class="success">Request ${i}: Got response data</div>`;
+                    }
+                    
+                } catch (error) {
+                    output += `<div class="error">Request ${i} failed: ${error.message}</div>`;
+                }
+                
+                // Wait between requests
+                if (i < 3) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.testListProjects = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>List Projects Test</h3>';
+            
+            try {
+                output += '<div class="info">📋 Testing list projects endpoint...</div>';
+                
+                const listPayload = {
+                    action: 'list_projects'
+                };
+                
+                output += `<div class="info">Request to: ${endpoints.listProjects}</div>`;
+                output += `<div class="response-box">${JSON.stringify(listPayload, null, 2)}</div>`;
+                
+                const response = await fetch(endpoints.listProjects, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(listPayload)
+                });
+                
+                const responseText = await response.text();
+                
+                output += `<div class="info">Status: ${response.status}</div>`;
+                output += `<div class="info">Response:</div>`;
+                output += `<div class="response-box">${responseText}</div>`;
+                
+                if (response.ok && responseText.trim() !== '') {
+                    try {
+                        const parsed = JSON.parse(responseText);
+                        output += '<div class="success">✅ List projects endpoint working</div>';
+                        
+                        if (parsed.projects && Array.isArray(parsed.projects)) {
+                            output += `<div class="info">Found ${parsed.projects.length} existing projects</div>`;
+                            if (parsed.projects.length > 0) {
+                                output += '<div class="info">This suggests database connection is working</div>';
+                                output += '<div class="warning">Issue might be in create workflow, not database access</div>';
+                            }
+                        }
+                    } catch (e) {
+                        output += '<div class="warning">Non-JSON response from list endpoint</div>';
+                    }
+                } else {
+                    output += '<div class="error">List projects also failing - database connection issue</div>';
+                }
+                
+            } catch (error) {
+                output += '<div class="error">❌ List projects test failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+    </script>
+</body>
+</html>

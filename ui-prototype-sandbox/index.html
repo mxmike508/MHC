@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bob AI Platform - Construction Management Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="assets/Bob_Logo.png">
+</head>
+<body>
+    <!-- Main Application Container -->
+    <div id="app-container"> 
+        <!-- Header Navigation Bar -->
+        <header id="main-header">
+            <div class="header-content">
+                <!-- Logo and Brand -->
+                <div class="brand-section">
+                    <img src="assets/Bob_Logo.png" alt="Bob AI" class="logo" onerror="this.style.display='none'">
+                </div>
+
+                <!-- Main Navigation Menu -->
+                <nav class="main-navigation">
+                    <div class="nav-item dropdown" data-module="sales">
+                        <button class="nav-button">Sales <span class="dropdown-arrow">▼</span></button>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item">Leads</a>
+                            <a href="#" class="dropdown-item">Prospects</a>
+                            <a href="#" class="dropdown-item">Estimates</a>
+                            <a href="#" class="dropdown-item">Proposals</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-item dropdown" data-module="jobs">
+                        <button class="nav-button">Jobs <span class="dropdown-arrow">▼</span></button>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item">Active Projects</a>
+                            <a href="#" class="dropdown-item">Completed</a>
+                            <a href="#" class="dropdown-item">Scheduling</a>
+                            <a href="#" class="dropdown-item">Progress Reports</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-item dropdown" data-module="project-management">
+                        <button class="nav-button">Project Management <span class="dropdown-arrow">▼</span></button>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item">Tasks & Workflows</a>
+                            <a href="#" class="dropdown-item">Team Management</a>
+                            <a href="#" class="dropdown-item">Resource Planning</a>
+                            <a href="#" class="dropdown-item">Quality Control</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-item dropdown" data-module="documents">
+                        <button class="nav-button">Files <span class="dropdown-arrow">▼</span></button>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item">Project Documents</a>
+                            <a href="#" class="dropdown-item">Contracts</a>
+                            <a href="#" class="dropdown-item">Photos</a>
+                            <a href="#" class="dropdown-item">Plans & Specs</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-item dropdown" data-module="chat">
+                        <button class="nav-button">AI Assistant <span class="dropdown-arrow">▼</span></button>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item" data-submodule="interface">Chat Interface</a>
+                            <a href="#" class="dropdown-item" data-action="commit-memory">Commit to Memory</a>
+                            <a href="#" class="dropdown-item" data-action="clear-history">Clear History</a>
+                            <a href="#" class="dropdown-item" data-action="switch-project">Switch project</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-item dropdown" data-module="financial">
+                        <button class="nav-button">Financial <span class="dropdown-arrow">▼</span></button>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item">Budgets</a>
+                            <a href="#" class="dropdown-item">Cost Tracking</a>
+                            <a href="#" class="dropdown-item">Invoicing</a>
+                            <a href="#" class="dropdown-item">Reports</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-item dropdown" data-module="reports">
+                        <button class="nav-button">Reports <span class="dropdown-arrow">▼</span></button>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item">Project Reports</a>
+                            <a href="#" class="dropdown-item">Financial Reports</a>
+                            <a href="#" class="dropdown-item">Performance Analytics</a>
+                            <a href="#" class="dropdown-item">Custom Reports</a>
+                        </div>
+                    </div>
+
+                    <div class="nav-item" data-module="config">
+                        <button class="nav-button">⚙️ Configuration</button>
+                    </div>
+                </nav>
+
+                <!-- User Actions -->
+                <div class="user-actions">
+                    <div class="search-container">
+                        <input type="text" placeholder="Search..." class="search-input">
+                        <button class="search-button">🔍</button>
+                    </div>
+                    <button class="notification-button">🔔</button>
+                    <button class="settings-button">⚙️</button>
+                    <button class="user-menu-button">👤</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="main-content">
+            <div class="content-wrapper">
+                <!-- Dynamic Module Loading Area -->
+                <div id="module-container">
+                    <!-- Default Dashboard Content -->
+                    <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Loading module...</p>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar -->
+                <aside id="sidebar" class="sidebar">
+                    <div class="sidebar-section">
+                        <h3>This Week's Agenda</h3>
+                        <div class="agenda-calendar">
+                            <div class="calendar-day">
+                                <span class="day-number">08</span>
+                                <span class="day-name">Monday</span>
+                                <span class="day-date">Sep 2025</span>
+                            </div>
+                            <div class="calendar-day">
+                                <span class="day-number">09</span>
+                                <span class="day-name">Tuesday</span>
+                                <span class="day-date">Sep 2025</span>
+                            </div>
+                            <div class="calendar-day">
+                                <span class="day-number">10</span>
+                                <span class="day-name">Wednesday</span>
+                                <span class="day-date">Sep 2025</span>
+                            </div>
+                            <div class="calendar-day">
+                                <span class="day-number">11</span>
+                                <span class="day-name">Thursday</span>
+                                <span class="day-date">Sep 2025</span>
+                            </div>
+                            <div class="calendar-day">
+                                <span class="day-number">12</span>
+                                <span class="day-name">Friday</span>
+                                <span class="day-date">Sep 2025</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <h3>Client Updates</h3>
+                        <div class="updates-counter">
+                            <span class="counter-number">0</span>
+                            <span class="counter-label">Updates shared with clients this month</span>
+                        </div>
+                        <div class="update-tabs">
+                            <button class="tab-button active">Client Updates</button>
+                            <button class="tab-button">Daily Logs</button>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <h3>Environment & System</h3>
+                        <div class="system-status">
+                            <div class="status-item">
+                                <span class="status-label">System Status:</span>
+                                <span class="status-value online">Online</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">Active Users:</span>
+                                <span class="status-value">3</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">Version:</span>
+                                <span class="status-value">v2.0.1</span>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer id="main-footer">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <span>Bob AI Platform v2.0 - Professional Construction Management</span>
+                </div>
+                <div class="footer-right">
+                    <span id="system-time"></span>
+                    <span class="footer-separator">|</span>
+                    <span>Mike Holland Construction, Inc.</span>
+                    <span class="footer-separator">|</span>
+                    <span id="chat-version" style="font-weight: bold;">Chat v1.3.1.6</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Module Loading System -->
+    <script type="module" src="module-loader.js"></script>
+    
+    <script>
+        function updateSystemTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            const systemTimeElement = document.getElementById('system-time');
+            if (systemTimeElement) {
+                systemTimeElement.textContent = timeString;
+            }
+        }
+        
+        // Start system time updates
+        document.addEventListener('DOMContentLoaded', function() {
+            updateSystemTime();
+            setInterval(updateSystemTime, 1000);
+            
+            // Note: Chat module auto-loading is handled by module-loader.js
+            
+            // Configure settings button to open config panel
+            const settingsButton = document.querySelector('.settings-button');
+            if (settingsButton) {
+                settingsButton.addEventListener('click', async function() {
+                    console.log('⚙️ Settings button clicked - loading config module...');
+                    
+                    // Get module loader instance (capital M)
+                    if (typeof window.ModuleLoader !== 'undefined') {
+                        try {
+                            // Load and show config module
+                            const configModule = await window.ModuleLoader.loadModule('config');
+                            if (configModule && typeof configModule.toggle === 'function') {
+                                configModule.toggle();
+                            } else {
+                                console.error('❌ Config module not properly loaded or missing toggle method');
+                            }
+                        } catch (error) {
+                            console.error('❌ Failed to load config module:', error);
+                        }
+                    } else {
+                        console.error('❌ ModuleLoader not available - check if module-loader.js loaded');
+                    }
+                });
+                console.log('✅ Settings button configured for config module');
+            } else {
+                console.error('❌ Settings button not found');
+            }
+        });
+    </script>
+</body>
+</html>

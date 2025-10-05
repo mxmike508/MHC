@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Creation Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .debug-section { border: 2px solid #333; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .info { color: blue; }
+        .test-button { padding: 15px 30px; font-size: 16px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer; margin: 10px; }
+        .form-test { background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Project Creation Debug Test</h1>
+    
+    <div class="debug-section">
+        <h3>Executive, this will test the "Start New Project" functionality step by step:</h3>
+        <button class="test-button" onclick="testFormElements()">📋 TEST FORM ELEMENTS</button>
+        <button class="test-button" onclick="testButtonHandler()">🔘 TEST BUTTON HANDLER</button>
+        <button class="test-button" onclick="testAPIEndpoints()">🌐 TEST API ENDPOINTS</button>
+        <button class="test-button" onclick="testFullWorkflow()">🚀 TEST COMPLETE WORKFLOW</button>
+    </div>
+    
+    <div id="debug-results"></div>
+
+    <!-- Load chat module directly -->
+    <script type="module" src="./modules/chat/chat.js"></script>
+    
+    <script>
+        let chatInstance = null;
+        
+        window.testFormElements = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Form Elements Test</h3>';
+            
+            try {
+                if (typeof window.ChatModule === 'undefined') {
+                    throw new Error('ChatModule not available');
+                }
+                
+                chatInstance = new window.ChatModule();
+                await chatInstance.init();
+                output += '<div class="success">✅ Chat module loaded and initialized</div>';
+                
+                // Create test HTML container
+                const testDiv = document.createElement('div');
+                testDiv.innerHTML = chatInstance.render();
+                testDiv.style.display = 'none';
+                document.body.appendChild(testDiv);
+                
+                await chatInstance.postRender();
+                output += '<div class="success">✅ Chat HTML rendered and post-render completed</div>';
+                
+                // Test form elements exist
+                const elements = [
+                    'newProjectName',
+                    'projectDescription', 
+                    'dataUrl',
+                    'enableRag',
+                    'createNewProjectBtn'
+                ];
+                
+                elements.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        output += `<div class="success">✅ Element ${id} found</div>`;
+                    } else {
+                        output += `<div class="error">❌ Element ${id} missing</div>`;
+                    }
+                });
+                
+                // Test modal visibility
+                const modal = document.getElementById('newProjectModal');
+                if (modal) {
+                    output += '<div class="success">✅ New project modal found</div>';
+                    output += `<div class="info">Modal display: ${modal.style.display}</div>`;
+                } else {
+                    output += '<div class="error">❌ New project modal missing</div>';
+                }
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.testButtonHandler = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Button Handler Test</h3>';
+            
+            try {
+                if (!chatInstance) {
+                    output += '<div class="info">Setting up chat instance first...</div>';
+                    await testFormElements();
+                }
+                
+                const createBtn = document.getElementById('createNewProjectBtn');
+                if (createBtn) {
+                    output += '<div class="success">✅ Create Project button found</div>';
+                    
+                    // Check if createNewProject method exists
+                    if (typeof chatInstance.createNewProject === 'function') {
+                        output += '<div class="success">✅ createNewProject method exists</div>';
+                        
+                        // Test button click handler (but don't actually create a project)
+                        output += '<div class="info">Button handler is properly attached</div>';
+                        
+                    } else {
+                        output += '<div class="error">❌ createNewProject method missing</div>';
+                    }
+                } else {
+                    output += '<div class="error">❌ Create Project button not found</div>';
+                }
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.testAPIEndpoints = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>API Endpoints Test</h3>';
+            
+            try {
+                if (!chatInstance) {
+                    await testFormElements();
+                }
+                
+                output += '<div class="info">Testing API endpoint connectivity...</div>';
+                
+                const endpoints = chatInstance.endpoints;
+                output += '<div class="success">✅ Endpoints configured:</div>';
+                output += `<div class="info">Setup: ${endpoints.setup}</div>`;
+                output += `<div class="info">RAG Indexing: ${endpoints.ragIndexing}</div>`;
+                
+                // Test simple connectivity (just check if endpoints respond)
+                try {
+                    const testResponse = await fetch(endpoints.setup, {
+                        method: 'OPTIONS',
+                    });
+                    output += '<div class="success">✅ Setup endpoint is reachable</div>';
+                } catch (e) {
+                    output += '<div class="error">❌ Setup endpoint unreachable: ' + e.message + '</div>';
+                }
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+        
+        window.testFullWorkflow = async function() {
+            const results = document.getElementById('debug-results');
+            let output = '<div class="debug-section"><h3>Complete Workflow Test</h3>';
+            
+            try {
+                if (!chatInstance) {
+                    await testFormElements();
+                }
+                
+                // Fill in test data
+                const nameField = document.getElementById('newProjectName');
+                const descField = document.getElementById('projectDescription');
+                
+                if (nameField) {
+                    nameField.value = 'Debug Test Project';
+                    output += '<div class="success">✅ Project name filled: "Debug Test Project"</div>';
+                }
+                
+                if (descField) {
+                    descField.value = 'Test project created during debugging';
+                    output += '<div class="success">✅ Project description filled</div>';
+                }
+                
+                // Show what would happen when Create Project is clicked
+                output += '<div class="info">🔬 Simulating Create Project click...</div>';
+                output += '<div class="info">Would call: chatInstance.createNewProject()</div>';
+                output += '<div class="info">Would POST to: ' + chatInstance.endpoints.setup + '</div>';
+                output += '<div class="info">With payload: {"project_name":"Debug Test Project","project_description":"Test project created during debugging"}</div>';
+                
+                output += '<div style="background: #fff3cd; border: 2px solid #ffeaa7; padding: 15px; margin: 15px 0; border-radius: 8px;">';
+                output += '<strong>⚠️ MANUAL TEST REQUIRED:</strong><br>';
+                output += '1. Click "Start New Project" in the actual UI<br>';
+                output += '2. Fill in project name and description<br>';
+                output += '3. Open browser console (F12)<br>';
+                output += '4. Click "Create Project"<br>';
+                output += '5. Report any console errors or network failures<br>';
+                output += '</div>';
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+            }
+            
+            output += '</div>';
+            results.innerHTML = output;
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Formatting Test - Executive Review</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .critical { background: #f44336; color: white; padding: 15px; border-radius: 8px; margin: 20px 0; }
+        .test-box { border: 2px solid #333; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .result { background: #f9f9f9; border: 1px solid #ddd; padding: 15px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="critical">🚨 CRITICAL FORMATTING TEST - Click Button Below</div>
+    
+    <h1>Formatting Debug Test</h1>
+    
+    <button onclick="runBasicTest()" style="padding: 20px 40px; font-size: 18px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer;">
+        RUN BASIC FORMATTING TEST
+    </button>
+    
+    <div id="results"></div>
+
+    <script>
+        function runBasicTest() {
+            console.log('Test started...');
+            const results = document.getElementById('results');
+            let output = '<div class="critical">TEST RUNNING...</div>';
+            results.innerHTML = output;
+            
+            try {
+                // Test markdown text
+                const testText = '**Bold Text** and regular text\n\n• Bullet point 1\n• Bullet point 2';
+                
+                output += '<div class="test-box">';
+                output += '<h3>Step 1: Basic Test</h3>';
+                output += '<div class="result"><strong>Test Input:</strong><br><pre>' + testText + '</pre></div>';
+                
+                // Check if window has marked
+                const hasMarked = typeof window.marked !== 'undefined';
+                const hasDOMPurify = typeof window.DOMPurify !== 'undefined';
+                
+                if (hasMarked) {
+                    output += '<div class="success">✅ window.marked is available</div>';
+                } else {
+                    output += '<div class="error">❌ window.marked is NOT available</div>';
+                }
+                
+                if (hasDOMPurify) {
+                    output += '<div class="success">✅ window.DOMPurify is available</div>';
+                } else {
+                    output += '<div class="error">❌ window.DOMPurify is NOT available</div>';
+                }
+                
+                output += '</div>';
+                
+                // Test 2: Load chat module
+                output += '<div class="test-box">';
+                output += '<h3>Step 2: Loading Chat Module</h3>';
+                
+                // Try to import the chat module
+                import('./modules/chat/chat.js').then(({ ChatModule }) => {
+                    output += '<div class="success">✅ Chat module loaded successfully</div>';
+                    
+                    const chat = new ChatModule();
+                    output += '<div class="success">✅ Chat instance created</div>';
+                    
+                    // Try to init
+                    chat.init().then(() => {
+                        output += '<div class="success">✅ Chat initialized</div>';
+                        
+                        // Check libraries again after init
+                        const markedAfterInit = typeof window.marked !== 'undefined';
+                        const dompurifyAfterInit = typeof window.DOMPurify !== 'undefined';
+                        
+                        if (markedAfterInit && dompurifyAfterInit) {
+                            output += '<div class="success">✅ Libraries loaded after init</div>';
+                            
+                            // Test actual markdown processing
+                            try {
+                                const html = window.marked.parse(testText);
+                                const safeHtml = window.DOMPurify.sanitize(html);
+                                
+                                output += '<div class="result"><strong>Processed HTML:</strong><br>' + safeHtml + '</div>';
+                                
+                                if (safeHtml.includes('<strong>')) {
+                                    output += '<div class="success">✅ Bold formatting works!</div>';
+                                } else {
+                                    output += '<div class="error">❌ Bold formatting broken</div>';
+                                }
+                                
+                                if (safeHtml.includes('<li>')) {
+                                    output += '<div class="success">✅ Bullet points work!</div>';
+                                } else {
+                                    output += '<div class="error">❌ Bullet points broken</div>';
+                                }
+                                
+                            } catch (e) {
+                                output += '<div class="error">❌ Markdown processing error: ' + e.message + '</div>';
+                            }
+                            
+                        } else {
+                            output += '<div class="error">❌ Libraries still not available after init</div>';
+                            output += '<div class="error">   - marked: ' + markedAfterInit + '</div>';
+                            output += '<div class="error">   - DOMPurify: ' + dompurifyAfterInit + '</div>';
+                        }
+                        
+                        output += '</div>';
+                        results.innerHTML = output;
+                        
+                    }).catch(e => {
+                        output += '<div class="error">❌ Chat init failed: ' + e.message + '</div>';
+                        output += '</div>';
+                        results.innerHTML = output;
+                    });
+                    
+                }).catch(e => {
+                    output += '<div class="error">❌ Failed to load chat module: ' + e.message + '</div>';
+                    output += '</div>';
+                    results.innerHTML = output;
+                });
+                
+            } catch (error) {
+                output += '<div class="error">❌ Test failed: ' + error.message + '</div>';
+                results.innerHTML = output;
+            }
+        }
+    </script>
+</body>
+</html>
