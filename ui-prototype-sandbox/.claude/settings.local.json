@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:fluent2.microsoft.design)",
+      "Bash(start index.html)",
+      "Bash(dir:*)",
+      "Read(C:\\Users\\mholl\\OneDrive - Mike Holland Construction, Inc\\Bob\\All Bob AI's\\New\\Project Dashboard\\Bob 21 Sandbox/**)",
+      "Bash(taskkill:*)",
+      "Bash(start msedge:*)",
+      "Bash(timeout:*)",
+      "Bash(python:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

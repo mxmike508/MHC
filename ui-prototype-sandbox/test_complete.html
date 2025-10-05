@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete v1.3.1 Test</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header id="main-header">
+        <div class="header-content">
+            <div class="brand-section">
+                <span class="brand-text">Bob AI Platform - v1.3.1 Test</span>
+            </div>
+            <nav class="main-navigation">
+                <div class="nav-item" data-module="chat">
+                    <button class="nav-button active">AI Assistant</button>
+                </div>
+            </nav>
+            <div class="user-actions">
+                <button class="settings-button">⚙️</button>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-content">
+        <div id="module-container">
+            <div id="loading-indicator" style="display: none;">Loading...</div>
+        </div>
+    </main>
+
+    <script type="module">
+        console.log('Starting v1.3.1 test...');
+        
+        // Import module loader
+        import('./module-loader.js').then(() => {
+            console.log('ModuleLoader imported');
+            
+            // Initialize and load chat module
+            if (window.ModuleLoader) {
+                window.ModuleLoader.init();
+                console.log('ModuleLoader initialized');
+                
+                // Force load chat module
+                window.ModuleLoader.loadModule('chat').then(() => {
+                    console.log('Chat module loaded successfully');
+                    
+                    // Add test buttons to check functionality
+                    const testControls = document.createElement('div');
+                    testControls.style.cssText = `
+                        position: fixed;
+                        top: 60px;
+                        right: 10px;
+                        background: #f0f0f0;
+                        padding: 10px;
+                        border-radius: 8px;
+                        z-index: 1000;
+                    `;
+                    testControls.innerHTML = `
+                        <h4>v1.3.1 Test Controls</h4>
+                        <button onclick="testCreateProject()">Create Test Project</button><br><br>
+                        <button onclick="testHeaderInjection()">Test Header Injection</button><br><br>
+                        <button onclick="testVersionDisplay()">Test Version Display</button>
+                    `;
+                    document.body.appendChild(testControls);
+                    
+                    // Make test functions available globally
+                    window.testCreateProject = function() {
+                        console.log('Testing project creation...');
+                        const chatModule = window.ModuleLoader.getCurrentModule();
+                        if (chatModule) {
+                            chatModule.currentProjectId = 'test-project-123';
+                            chatModule.currentChatId = 'test-chat-456';
+                            chatModule.switchToChat('Test Project');
+                        }
+                    };
+                    
+                    window.testHeaderInjection = function() {
+                        console.log('Testing header injection...');
+                        const chatModule = window.ModuleLoader.getCurrentModule();
+                        if (chatModule && chatModule.injectHeaderControls) {
+                            chatModule.injectHeaderControls();
+                        }
+                    };
+                    
+                    window.testVersionDisplay = function() {
+                        console.log('Testing version display...');
+                        const versionDisplay = document.createElement('div');
+                        versionDisplay.style.cssText = `
+                            position: fixed;
+                            bottom: 10px;
+                            right: 10px;
+                            color: red;
+                            font-size: 0.75rem;
+                            font-weight: 500;
+                            z-index: 1000;
+                        `;
+                        versionDisplay.textContent = 'v1.3.1-test';
+                        document.body.appendChild(versionDisplay);
+                    };
+                    
+                }).catch(err => {
+                    console.error('Chat module failed to load:', err);
+                });
+            }
+        }).catch(err => {
+            console.error('ModuleLoader import failed:', err);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Version Display</title>
+</head>
+<body>
+    <h1>Version Display Test</h1>
+    <button onclick="testVersionDisplay()">Test Version Display</button>
+    <div id="output"></div>
+
+    <script>
+        function testVersionDisplay() {
+            console.log('Testing version display...');
+            
+            // Create version display element like in the chat module
+            const versionDisplay = document.createElement('div');
+            versionDisplay.id = 'test-version-display';
+            versionDisplay.style.cssText = `
+                position: fixed;
+                bottom: 10px;
+                right: 10px;
+                color: red;
+                font-size: 0.75rem;
+                font-weight: 500;
+                z-index: 1000;
+                pointer-events: none;
+                text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
+            `;
+            versionDisplay.textContent = 'v1.3.1-test';
+
+            document.body.appendChild(versionDisplay);
+            
+            document.getElementById('output').innerHTML = '✅ Version display added - check bottom right corner';
+            console.log('Version display added');
+        }
+    </script>
+</body>
+</html>

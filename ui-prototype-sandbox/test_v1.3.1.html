@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test v1.3.1 Module Loading</title>
+</head>
+<body>
+    <h1>Module Loading Test</h1>
+    <div id="test-output"></div>
+
+    <script>
+        console.log('Testing module loading...');
+        
+        // Test if we can load the module
+        import('./modules/chat/chat-v1.3.1.js')
+            .then(module => {
+                console.log('✅ Module loaded successfully:', module);
+                document.getElementById('test-output').innerHTML = '✅ chat-v1.3.1.js loaded successfully';
+            })
+            .catch(error => {
+                console.error('❌ Module loading failed:', error);
+                document.getElementById('test-output').innerHTML = '❌ Module loading failed: ' + error.message;
+            });
+    </script>
+</body>
+</html>

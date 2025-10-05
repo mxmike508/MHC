@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Module Loading</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .debug { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Debug Module Loading</h1>
+    <button onclick="checkModules()">Check Module Status</button>
+    <button onclick="loadChatModule()">Force Load Chat Module</button>
+    <div id="debug-output"></div>
+
+    <script type="module">
+        function log(message) {
+            const output = document.getElementById('debug-output');
+            output.innerHTML += '<div class="debug">' + message + '</div>';
+            console.log(message);
+        }
+
+        window.log = log;
+
+        window.checkModules = function() {
+            log('🔍 Checking module status...');
+            
+            if (window.ModuleLoader) {
+                log('✅ ModuleLoader found');
+                log('Current module: ' + (window.ModuleLoader.currentModule ? window.ModuleLoader.currentModule.constructor.name : 'None'));
+                
+                if (window.ModuleLoader.moduleCache) {
+                    log('Module cache contents:');
+                    for (let [key, module] of window.ModuleLoader.moduleCache) {
+                        log('  - ' + key + ': ' + (module ? module.constructor.name : 'null'));
+                    }
+                } else {
+                    log('❌ No module cache found');
+                }
+            } else {
+                log('❌ ModuleLoader not found');
+            }
+        };
+
+        window.loadChatModule = function() {
+            log('🚀 Attempting to load chat module...');
+            if (window.ModuleLoader) {
+                window.ModuleLoader.loadModule('chat')
+                    .then(() => log('✅ Chat module loaded'))
+                    .catch(err => log('❌ Chat module failed: ' + err.message));
+            } else {
+                log('❌ ModuleLoader not available');
+            }
+        };
+
+        // Auto-check on load
+        setTimeout(() => {
+            checkModules();
+        }, 1000);
+    </script>
+</body>
+</html>
