@@ -16,16 +16,19 @@
  * - Clean modular architecture
  */
 
+console.log('🚨🚨🚨 CONFIG V1.7.3 HTML STRUCTURE FIX LOADED!!! 🚨🚨🚨');
+
 export default class ConfigModule {
     constructor(moduleLoader) {
         this.moduleLoader = moduleLoader;
         this.isOpen = false;
         this.personaEditMode = false; // Track if we're in list or edit mode
         this.editingPersona = null; // Track which persona is being edited
+        console.log('✅ Config Module v1.7.2 constructor - !IMPORTANT FIX VERSION');
     }
 
     async init() {
-        console.log('🔧 Config Module v1.4 initializing...');
+        console.log('🔧 Config Module v1.7.2 initializing... (!IMPORTANT FIX)');
         // Module initialization
     }
 
@@ -45,6 +48,9 @@ export default class ConfigModule {
         }
 
         const panelHTML = `
+            <!-- Configuration Panel Backdrop -->
+            <div id="config-backdrop" class="config-backdrop"></div>
+
             <!-- Configuration Panel (Fixed Overlay from right) -->
             <div id="config-panel" class="config-panel">
                 <div id="config-panel-header" class="config-panel-header">
@@ -225,9 +231,9 @@ export default class ConfigModule {
                             </div>
                         </div>
                     </div>
-                </div>
-                <!-- Advanced Section -->
-                <div class="config-section collapsed" id="advanced-section">
+
+                    <!-- Advanced Section -->
+                    <div class="config-section collapsed" id="advanced-section">
                     <div class="config-section-header">
                         <div class="config-section-title">
                             <span class="config-section-icon">🔧</span>
@@ -275,10 +281,35 @@ export default class ConfigModule {
             </div>
         `;
 
+        // REMOVE any existing config style elements to prevent conflicts
+        const existingStyles = document.querySelectorAll('style[id^="config-"]');
+        existingStyles.forEach(style => {
+            console.log(`🗑️ Removing old style element: ${style.id}`);
+            style.remove();
+        });
+
         // Add styles to head
         const styleElement = document.createElement('style');
+        styleElement.id = 'config-v1-7-2-styles'; // Increment version for tracking
         styleElement.textContent = `
-            /* Configuration Panel Styles - Base styles from v1.3 + Personas additions */
+            /* Configuration Panel Styles - v1.7.2 FIX: !important priority + old style removal - UPDATED ${new Date().toISOString()} */
+
+            /* Backdrop to block background scrolling */
+            .config-backdrop {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.3);
+                z-index: 999;
+                display: none;
+            }
+
+            .config-backdrop.open {
+                display: block;
+            }
+
             .config-panel {
                 position: fixed;
                 top: 0;
@@ -289,8 +320,10 @@ export default class ConfigModule {
                 box-shadow: -2px 0 10px rgba(0,0,0,0.1);
                 z-index: 1000;
                 transition: right 0.3s ease-in-out;
-                overflow-y: auto;
+                overflow: hidden !important; /* CRITICAL: panel doesn't scroll, sections do */
                 border-left: 1px solid #e0e0e0;
+                display: flex !important;
+                flex-direction: column !important;
             }
             
             .config-panel.open {
@@ -301,12 +334,10 @@ export default class ConfigModule {
                 background: #f8f9fa;
                 padding: 20px;
                 border-bottom: 1px solid #e0e0e0;
-                position: sticky;
-                top: 0;
-                z-index: 10;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                flex-shrink: 0 !important; /* CRITICAL: Header doesn't shrink */
             }
             
             .config-panel-header h3 {
@@ -337,6 +368,8 @@ export default class ConfigModule {
             
             .config-sections {
                 padding: 20px;
+                flex: 1 !important; /* CRITICAL: Take remaining space */
+                overflow-y: auto !important; /* CRITICAL: Scroll when content overflows */
             }
             
             .config-placeholder {
@@ -357,6 +390,7 @@ export default class ConfigModule {
                 display: flex;
                 gap: 10px;
                 justify-content: flex-end;
+                flex-shrink: 0 !important; /* CRITICAL: Prevent footer from shrinking */
             }
             
             .config-btn {
@@ -878,8 +912,23 @@ export default class ConfigModule {
             }
         `;
 
+        // Verify style element is created
+        console.log(`✅ Style element created with ID: ${styleElement.id}`);
+        console.log(`✅ Style element has ${styleElement.textContent.length} characters of CSS`);
+
         document.head.appendChild(styleElement);
+        console.log(`✅ Style element appended to <head>`);
+
+        // Verify it's in the DOM
+        const verifyStyle = document.getElementById(styleElement.id);
+        if (verifyStyle) {
+            console.log(`✅ VERIFIED: Style element found in DOM with ID: ${verifyStyle.id}`);
+        } else {
+            console.error(`❌ ERROR: Style element NOT found in DOM!`);
+        }
+
         document.body.insertAdjacentHTML('beforeend', panelHTML);
+        console.log(`✅ Panel HTML inserted into <body>`);
     }
 
     async postRender() {
@@ -920,6 +969,13 @@ export default class ConfigModule {
             closeBtn.addEventListener('click', () => this.closePanel());
         } else {
             console.warn('❌ Close button not found');
+        }
+
+        // Backdrop click to close
+        const backdrop = document.getElementById('config-backdrop');
+        if (backdrop) {
+            backdrop.addEventListener('click', () => this.closePanel());
+            console.log('✅ Backdrop click listener added');
         }
 
         // Cancel button
@@ -967,19 +1023,27 @@ export default class ConfigModule {
 
     openPanel() {
         const panel = document.getElementById('config-panel');
+        const backdrop = document.getElementById('config-backdrop');
         if (panel) {
             panel.classList.add('open');
             this.isOpen = true;
             console.log('🔧 Config panel opened');
         }
+        if (backdrop) {
+            backdrop.classList.add('open');
+        }
     }
 
     closePanel() {
         const panel = document.getElementById('config-panel');
+        const backdrop = document.getElementById('config-backdrop');
         if (panel) {
             panel.classList.remove('open');
             this.isOpen = false;
             console.log('🔧 Config panel closed');
+        }
+        if (backdrop) {
+            backdrop.classList.remove('open');
         }
     }
 
