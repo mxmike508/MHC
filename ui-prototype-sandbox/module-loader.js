@@ -224,7 +224,7 @@ class ModuleLoader {
                 let moduleVersion = 'unknown';
 
                 if (moduleId === 'chat') {
-                    modulePath = `modules/${moduleId}/${moduleId}-v1.4.4.js?v=${timestamp}`;
+                    modulePath = `modules/${moduleId}/${moduleId}-v1.5.0.js?v=${timestamp}`;
                 } else if (moduleId === 'config') {
                     modulePath = `modules/${moduleId}/${moduleId}-v1.7.js?v=${timestamp}`;
                 } else {
@@ -559,13 +559,18 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
 }
 
 // Initialize the application when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Initialize module loader
     window.ModuleLoader.init();
-    
-    // Load default chat module
-    window.ModuleLoader.loadModule('chat');
-    
+
+    // PRE-LOAD Config module so Chat can access it
+    console.log('🔧 Pre-loading Config module for Chat integration...');
+    await window.ModuleLoader.loadModule('config');
+    console.log('✅ Config module loaded and cached');
+
+    // NOW load chat module (Config is in cache)
+    await window.ModuleLoader.loadModule('chat');
+
     // Set AI Assistant nav as active by default
     setTimeout(() => {
         const aiAssistantNav = document.querySelector('[data-module="chat"] .nav-button');
