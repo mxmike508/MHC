@@ -34,17 +34,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🚨 CURRENT STATUS - READ FIRST
 
-**STABLE**: Chat module v1.4.4 + Config module v1.7 - Complete through "Bite #6"
-**DEPLOYED LOCALLY**: All features functional including localStorage enhancements
-**TESTING**: Version v1.4.4 created to verify GitHub Pages deployment
-**SUCCESS**: Advanced config section + export/import + API timeout + max context + cross-domain localStorage
+**STABLE**: Chat module v1.5.0 + Config module v1.7.4 - ALL SYSTEMS FUNCTIONAL ✅
+**DEPLOYED LOCALLY**: Complete persona system working (frontend + n8n backend integrated)
+**SUCCESS**: Persona system fully functional + UI fixes complete + n8n workflow fixed
+**LAST UPDATED**: October 20, 2025
 
-### 🚨 DEPLOYMENT VERIFICATION IN PROGRESS
-**Version v1.4.4 Test Deployment**
-- **File**: `modules/chat/chat-v1.4.4.js` (copy of v1.4.3)
-- **Purpose**: Verify GitHub Pages is loading current code
-- **Test**: If GitHub Pages shows v1.4.4, deployment is working
-- **Status**: Awaiting GitHub Pages confirmation
+### Recent Fixes (Oct 20, 2025):
+✅ Config panel scrolling fixed
+✅ Switch Project dropdown working
+✅ Configuration button functional
+✅ Project header with hover tooltip (description + persona)
+✅ **n8n workflow persona bug fixed** - All personas now work correctly
+
 
 ## ⚡ Quick Reference
 
@@ -57,22 +58,77 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Version | Status | Notes |
 |---------|--------|-------|
-| v1.4.4 | ✅ **CURRENT STABLE** | Test deployment version (copy of v1.4.3) |
-| v1.4.3 | ✅ Complete | localStorage enhancement + cross-domain fix |
+| v1.5.0 | ✅ **CURRENT STABLE** | Persona assignment + config integration |
+| v1.4.4 | ✅ Complete | Export/Import + multi-key fallback for migration |
+| v1.4.3 | ✅ Complete | localStorage enhancement + export/import implementation |
 | v1.4.2 | ✅ Complete | Model selection + database branch integration |
 | v1.4.1 | ✅ Complete | Model selection integration + smart AI routing |
 | v1.4 | ✅ Complete | Config integration + stable baseline |
 
 | Config Version | Status | Notes |
 |---------------|--------|-------|
-| v1.7 | ✅ **CURRENT STABLE** | Complete 5-section config (Advanced + export/import) |
+| v1.7.4 | ✅ **CURRENT STABLE** | Config scrolling + auto-open fix (Oct 20) |
+| v1.7.3 | ✅ Complete | HTML structure fix for scrolling |
+| v1.7 | ✅ Complete | Complete 5-section config (Advanced + export/import) |
 | v1.6 | ✅ Complete | Advanced section with API timeout + max context |
 | v1.5 | ✅ Complete | Personas section improvements |
 
 **Key Files:**
-- `module-loader.js` line 225, 227 - Controls which versions load (chat v1.4.4 + config v1.7)
-- `modules/chat/chat-v1.4.4.js` - **ENHANCED localStorage** with cross-domain fallback patterns
-- `modules/config/config-v1.7.js` - Complete 5-section configuration with Advanced features
+- `module-loader.js` - Module loading + Config pre-load + cached module handling
+- `modules/chat/chat-v1.5.0.js` - Persona system + header tooltip + project state
+- `modules/config/config-v1.7.js` (v1.7.4) - 5-section config + scrolling fix
+- `styles.css` - Header positioning fix (position: relative)
+- `n8n Workflows/Master Workflow.json` - Backend persona handling (pickSystemPrompt fix)
+
+**IMPORTANT - Storage Architecture Clarification:**
+The "multi-key fallback" feature tries different localStorage key patterns on the SAME domain. It does NOT fetch from external sources or different domains. Browser localStorage is domain-isolated - localhost data cannot access github.io data. For true cross-domain persistence, Phase 2 (external fetch) or Phase 3 (database backend) is required.
+
+### 🛣️ Strategic Development Roadmap (October 2025)
+
+**Current Focus: Backend Development (Separate Session/Directory)**
+- UI is "stable enough" for backend integration testing
+- Chat persistence via n8n/Xata is **deferred** (not critical path)
+- Local testing with localStorage is sufficient for current phase
+- GitHub Pages deployment is **not required** for immediate work
+
+**Chat Persistence Strategy:**
+- **Phase 1 (CURRENT):** localStorage for local development - COMPLETE ✅
+- **Phase 2 (DEFERRED):** n8n + PostgreSQL (Xata) backend persistence
+  - Will integrate with existing n8n workflow infrastructure
+  - Same pattern as current "Commit to Memory" functionality
+  - Deferred until backend development stabilizes
+- **Interim Solution:** Manual Export/Import for critical conversations
+
+**Rationale:**
+- Avoid rabbit holes and stay focused on critical path
+- Backend work (in progress elsewhere) takes priority
+- Chat UI has achieved stable baseline for testing
+- Cross-domain persistence can wait until backend architecture matures
+
+**Work Order Created:** See `command_center/work_orders/pending/` for future n8n/Xata chat persistence implementation
+
+### Persona Assignment (v1.5.0 - COMPLETE ✅)
+Chat module v1.5.0 implements full persona assignment:
+- **Persona Dropdown**: Select AI personality during project creation
+- **Per-Project Persistence**: Each project remembers its persona choice via localStorage
+- **Config Integration**: Syncs with Config module v1.7 persona management
+- **System Prompt Injection**: Sends full persona content with every message
+- **Fallback Handling**: Works even if config module unavailable (3 default personas)
+
+**How It Works:**
+1. New project modal displays persona dropdown
+2. User selects persona (Developer Assistant, Business Analyst, Facts Extractor, custom)
+3. Persona key sent to backend during project creation
+4. Persona-project mapping saved to localStorage
+5. System prompt content injected with every message
+6. AI behavior reflects selected persona
+
+**Key Implementation:**
+- localStorage key: `project_personas` maps project IDs to persona keys
+- Config module provides persona list via `getAllPersonas()`
+- Fallback to 3 hardcoded defaults if config unavailable
+- System prompt sent as `system_prompt_content` in message payload
+
 - `styles.css` line 362 - Module container background (now black for clean UX)
 - `index.html` - Navigation and container
 - `version_update.md` - Complete version history and documentation
