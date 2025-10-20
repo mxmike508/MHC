@@ -16,7 +16,7 @@
  * - Clean modular architecture
  */
 
-console.log('🚨🚨🚨 CONFIG V1.7.3 HTML STRUCTURE FIX LOADED!!! 🚨🚨🚨');
+console.log('🚨🚨🚨 CONFIG V1.7.4 AUTO-OPEN FIX LOADED!!! 🚨🚨🚨');
 
 export default class ConfigModule {
     constructor(moduleLoader) {
@@ -953,12 +953,13 @@ export default class ConfigModule {
             
             // Load advanced settings
             this.loadAdvancedSettings();
-            
-            // Auto-open the config panel
-            this.openPanel();
+
+            // ❌ REMOVED: Don't auto-open panel on load (breaks Switch Project dropdown)
+            // Panel now only opens when user clicks ⚙️ Configuration button
+            // this.openPanel();
         }, 500);
-        
-        console.log('✅ Config Module v1.7 ready - Panel will slide in from right (NUCLEAR HEADER FIX)');
+
+        console.log('✅ Config Module v1.7 ready - Panel loads silently, opens on button click only');
     }
 
     setupEventListeners() {

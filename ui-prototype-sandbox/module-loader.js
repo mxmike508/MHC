@@ -217,6 +217,14 @@ class ModuleLoader {
             if (this.moduleCache.has(cacheKey)) {
                 moduleInstance = this.moduleCache.get(cacheKey);
                 console.log(`Module loaded from cache: ${cacheKey}`);
+
+                // Special handling for config module - show the panel when clicked
+                if (moduleId === 'config' && moduleInstance.show) {
+                    moduleInstance.show();
+                    console.log('🔧 Config panel opened via show() method');
+                    this.hideLoading();
+                    return; // Don't continue with full load process
+                }
             } else {
                 // Load module file with cache busting for specific modules
                 const timestamp = new Date().getTime();

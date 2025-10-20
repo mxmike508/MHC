@@ -157,6 +157,7 @@ body {
 }
 
 .header-content {
+    position: relative; /* Added: Allows absolute positioning of project info */
     display: flex;
     align-items: center;
     height: 100%;
