@@ -254,7 +254,7 @@ export default class ConfigModule {
                         
                         <div class="config-item">
                             <label for="cfg-max-context">Max Context Messages</label>
-                            <input type="number" id="cfg-max-context" min="5" max="50" value="20">
+                            <input type="number" id="cfg-max-context" min="5" max="100" value="20">
                             <div class="config-description">
                                 Maximum number of recent messages to include in conversation context.
                             </div>
