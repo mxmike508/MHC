@@ -170,6 +170,12 @@ var body = $('Webhook1').first().json.body || {};
    - Not causing issues currently
    - Only needed if want to clean up localStorage
 
+3. **INVESTIGATE: "Automatic Long-Term Memory" Behavior** (DISCOVERY):
+   - User reports AI remembers full conversations across browser restarts
+   - No "Commit to Memory" button needed
+   - Hypothesis: localStorage persistence + large context window
+   - See "Context Discovery" section below
+
 ### Key Files to Understand:
 - `ui-prototype-sandbox/modules/chat/chat-v1.5.0.js` - Persona injection
 - `ui-prototype-sandbox/modules/config/config-v1.7.js` - Persona management
@@ -201,4 +207,68 @@ var body = $('Webhook1').first().json.body || {};
 
 ---
 
-**Session completed successfully. All original goals achieved. System fully functional.**
+## 🔍 Context Discovery: "Automatic Long-Term Memory"
+
+### User Report (Late Session):
+User discovered unexpected behavior in Chat v1.5.0:
+- Has comprehensive conversation with AI
+- Closes browser completely (relaunches dev server)
+- Reopens same project
+- **AI remembers ENTIRE conversation** without using "Commit to Memory"
+
+### Original Chat 10.4 Design:
+- **Short-term:** n8n queries last 6 messages from `conversation_history` table
+- **Long-term:** Manual "Commit to Memory" distills facts → `rag_store` with embeddings
+- **Sliding window:** Only 6 messages sent to AI (hardcoded in n8n workflow line 1306)
+
+### Chat v1.5.0 Changes (Frontend Only):
+- No n8n workflow modifications made
+- Added `ChatHistoryManager` class (saves to localStorage)
+- Added `getLimitedConversationHistory()` function
+- Payload includes: `conversation_history: this.getLimitedConversationHistory()`
+- Configurable via `cfg_max_context` (default 20, max now 100)
+
+### Hypothesis - What's Actually Happening:
+
+**localStorage Persistence:**
+1. `ChatHistoryManager` saves every message to browser localStorage
+2. localStorage survives browser close/reopen
+3. Same project = same project_id = same localStorage key
+4. History automatically restored on reload
+
+**Large Context Window:**
+1. Frontend sends up to 100 messages in `conversation_history` payload
+2. n8n workflow may use BOTH:
+   - Its own database query (`LIMIT 6`)
+   - Frontend's `conversation_history` field
+3. Result: AI gets much larger context than original 6-message design
+
+### Questions to Investigate:
+1. Does n8n "Build OpenAI Payload" node actually USE the frontend's `conversation_history` field?
+2. Is the n8n `LIMIT 6` being overridden/merged with frontend history?
+3. Is this localStorage persistence or true RAG vector search?
+4. Should we make n8n's sliding window configurable to match frontend setting?
+
+### Advanced Settings Investigation:
+While investigating, verified both Advanced settings work correctly:
+
+**API Timeout (`cfg_api_timeout`):**
+- Default: 25 seconds, Min: 5, Max: 120
+- Used by `fetchWithTimeout()` for all API calls
+- Console logs timeout value on each request
+
+**Max Context Messages (`cfg_max_context`):**
+- Default: 20, Min: 5, Max: ~~50~~ **100** (increased this session)
+- Used by `getLimitedConversationHistory()`
+- Limits messages sent in frontend payload
+- Console logs context size on each message
+
+### Next Steps:
+- User will provide transcript of AI conversation showing its "amazement" at own memory
+- Analyze transcript to understand what context AI is actually receiving
+- Determine if n8n workflow needs modification to respect frontend context settings
+- Consider if this "automatic persistence" is desired behavior or should be modified
+
+---
+
+**Session completed successfully. All original goals achieved. System fully functional. Context mystery discovered - investigation ongoing.**
