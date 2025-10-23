@@ -197,7 +197,8 @@ class ChatModule {
             chat: 'https://n8n.srv997771.hstgr.cloud/webhook/3c92075f-a856-439a-b70d-73f3c847f8fa',
             commitMemory: 'https://n8n.srv997771.hstgr.cloud/webhook/6c1ce608-2f7a-457b-9afc-f0be5ef4bd4c',
             imageHandler: 'https://n8n.srv997771.hstgr.cloud/webhook/e09ef7c8-656d-49fb-a84a-2bc21f6c377d',
-            documentHandler: 'https://n8n.srv997771.hstgr.cloud/webhook/0f0b56ad-64e2-4008-9108-eb247c85787c'
+            documentHandler: 'https://n8n.srv997771.hstgr.cloud/webhook/0f0b56ad-64e2-4008-9108-eb247c85787c',
+            loadHistory: 'https://n8n.srv997771.hstgr.cloud/webhook/load-conversation-history'
         };
         
         // Chat state
@@ -404,10 +405,23 @@ class ChatModule {
     }
 
     /**
-     * NEW v1.2: Restore chat history from localStorage
+     * NEW v1.2: Restore chat history - tries backend first, falls back to localStorage
+     * Platform-agnostic: Works across devices by loading from database
      */
-    restoreChatHistory() {
+    async restoreChatHistory() {
         if (!this.historyManager || !this.chatWindow) return;
+
+        // Try loading from backend first (platform-agnostic)
+        if (this.currentChatId) {
+            const loadedFromBackend = await this.loadConversationHistoryFromBackend(this.currentChatId);
+            if (loadedFromBackend) {
+                console.log('✅ Chat history restored from backend database');
+                return; // Successfully loaded from backend, we're done
+            }
+        }
+
+        // Fallback to localStorage if backend load failed or returned no data
+        console.log('📖 Falling back to localStorage for chat history');
 
         const history = this.historyManager.loadHistory();
         if (history.length === 0) {
@@ -415,7 +429,7 @@ class ChatModule {
             return;
         }
 
-        console.log(`📖 Restoring ${history.length} messages from chat history`);
+        console.log(`📖 Restoring ${history.length} messages from localStorage`);
 
         // Clear current chat window (except welcome message)
         this.clearChatWindow(false);
@@ -436,7 +450,82 @@ class ChatModule {
             this.chatWindow.scrollTop = this.chatWindow.scrollHeight;
         }
 
-        console.log('✅ Chat history restored successfully');
+        console.log('✅ Chat history restored from localStorage');
+    }
+
+    /**
+     * NEW: Load conversation history from backend database
+     * Platform-agnostic persistence - works across devices
+     */
+    async loadConversationHistoryFromBackend(sessionId) {
+        if (!sessionId) {
+            console.log('⚠️ No session ID provided for backend history loading');
+            return false;
+        }
+
+        try {
+            const maxContext = parseInt(localStorage.getItem('cfg_max_context') || '100');
+            console.log(`🔄 Loading conversation history from backend for session: ${sessionId} (max: ${maxContext})`);
+
+            const response = await this.fetchWithTimeout(this.endpoints.loadHistory, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_session_id: sessionId,  // Per Master Data Contract: UI sends chat_session_id
+                    max_context: maxContext
+                })
+            });
+
+            if (!response.ok) {
+                console.warn(`⚠️ Backend history load failed: ${response.status} ${response.statusText}`);
+                return false;
+            }
+
+            const result = await response.json();
+
+            if (!result.success || !result.messages) {
+                console.warn('⚠️ Backend returned unsuccessful or empty result');
+                return false;
+            }
+
+            console.log(`✅ Loaded ${result.count} messages from backend database`);
+
+            // If we got messages from backend, populate localStorage and display
+            if (result.messages.length > 0) {
+                // Clear current chat window
+                this.clearChatWindow(false);
+
+                // Process each message
+                result.messages.forEach(msg => {
+                    // Determine sender based on role
+                    const sender = msg.role === 'user' ? 'user' : 'ai';
+
+                    // Add to UI (with saveToHistory = true to populate localStorage cache)
+                    this.addMessageToUI(sender, msg.content, false, true);
+                });
+
+                // Hide welcome message
+                const welcome = document.getElementById('chatWelcome');
+                if (welcome) {
+                    welcome.style.display = 'none';
+                }
+
+                // Scroll to bottom
+                if (this.chatWindow) {
+                    this.chatWindow.scrollTop = this.chatWindow.scrollHeight;
+                }
+
+                console.log('✅ Backend history loaded and displayed, localStorage cache updated');
+                return true;
+            } else {
+                console.log('📖 No messages found in backend for this session');
+                return false;
+            }
+
+        } catch (error) {
+            console.error('❌ Failed to load history from backend:', error);
+            return false;
+        }
     }
 
     /**
@@ -1677,7 +1766,7 @@ class ChatModule {
                     persona_key: selectedPersona,
                     database_branch: currentBranch,
                     xata_branch: this.getXataBranch(currentBranch),
-                    data_url: dataUrl
+                    jsonUrl: dataUrl  // Fixed: Changed from data_url to jsonUrl to match n8n workflow expectation
                 };
             } else {
                 // Create simple project - match Chat v10.4 format exactly
@@ -1747,7 +1836,7 @@ class ChatModule {
         }
     }
 
-    switchToChat(projectName) {
+    async switchToChat(projectName) {
         document.getElementById('projectLauncher').style.display = 'none';
         document.getElementById('chatInterface').style.display = 'flex';
 
@@ -1764,12 +1853,12 @@ class ChatModule {
 
         // NEW v1.3.1.1: Add project info to header
         this.addProjectInfoToHeader();
-        
+
         // NEW v1.3.1.2: Replace AI Assistant dropdown items only
         this.replaceAIAssistantDropdownItems();
-        
-        // NEW v1.2: Restore chat history when switching to chat
-        this.restoreChatHistory();
+
+        // NEW v1.2: Restore chat history when switching to chat (now async - tries backend first)
+        await this.restoreChatHistory();
     }
 
     switchProject() {

@@ -1,0 +1,135 @@
+{
+  "name": "Load Conversation History",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "load-conversation-history",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "id": "webhook-load-history-trigger",
+      "name": "Webhook: Load History Trigger",
+      "webhookId": "load-conversation-history"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT role, content, created_at\nFROM conversation_history\nWHERE session_id = $1\nORDER BY created_at ASC\nLIMIT $2;",
+        "options": {
+          "queryReplacement": "={{ [$json.body.chat_session_id, $json.body.max_context || 100] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        460,
+        300
+      ],
+      "id": "postgres-get-conversation-history",
+      "name": "Postgres: Get Conversation History",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "wnjdz7ukUBDZySLN",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Postgres results to always return an array\nconst items = $input.all();\n\n// Extract messages from Postgres results\nconst messages = items.map(item => ({\n  role: item.json.role,\n  content: item.json.content,\n  created_at: item.json.created_at\n}));\n\n// Get session_id from webhook\nconst sessionId = $('Webhook: Load History Trigger').first().json.body.chat_session_id;\n\n// Return normalized response\nreturn [\n  {\n    json: {\n      success: true,\n      messages: messages,\n      count: messages.length,\n      session_id: sessionId\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ],
+      "id": "code-normalize-response",
+      "name": "Code: Normalize Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, GET, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        300
+      ],
+      "id": "respond-to-webhook-history",
+      "name": "Respond: Return History"
+    }
+  ],
+  "connections": {
+    "Webhook: Load History Trigger": {
+      "main": [
+        [
+          {
+            "node": "Postgres: Get Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: Get Conversation History": {
+      "main": [
+        [
+          {
+            "node": "Code: Normalize Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Normalize Response": {
+      "main": [
+        [
+          {
+            "node": "Respond: Return History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-23T00:00:00.000Z",
+  "versionId": "1.1.0"
+}
