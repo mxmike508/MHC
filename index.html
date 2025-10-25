@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="0; url=ui-prototype-sandbox/">
+    <title>Redirecting to Bob AI Platform...</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f3f3f3;
+        }
+        .redirect-message {
+            text-align: center;
+            color: #323130;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e1dfdd;
+            border-top: 4px solid #0078d4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="redirect-message">
+        <div class="spinner"></div>
+        <h2>Redirecting to Bob AI Platform...</h2>
+        <p>If you are not redirected automatically, <a href="ui-prototype-sandbox/">click here</a>.</p>
+    </div>
+</body>
+</html>
