@@ -34,17 +34,105 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🚨 CURRENT STATUS - READ FIRST
 
-**STABLE**: Chat module v1.5.0 + Config module v1.7.4 - ALL SYSTEMS FUNCTIONAL ✅
-**DEPLOYED LOCALLY**: Complete persona system working (frontend + n8n backend integrated)
-**SUCCESS**: Persona system fully functional + UI fixes complete + n8n workflow fixed
-**LAST UPDATED**: October 20, 2025
+**STABLE**: Chat v1.6.4 + Config v1.8 + Master Workflow v5 + Update Project Info v1.1.0 ✅
+**DEPLOYED**: GitHub Pages + n8n Production - EDITABLE PROJECT INFO + CUSTOM DIALOGS
+**LAST UPDATED**: October 25, 2025
+
+### Latest Updates (Oct 25, 2025 - Session 7):
+✨ **NEW FEATURE: Chat v1.6.4 - Editable Project Info** - Full project editing with database persistence
+✅ **Click-to-Edit Header** - Click project name to open beautiful edit modal
+✅ **Windows 11-Style Modals** - Replaced ugly browser alerts with custom confirmation dialogs
+✅ **Database Integration** - Master Workflow v5 + Update Project Info v1.1.0
+✅ **Description Persistence** - Full cross-device persistence for project name, description, and persona
+✅ **Schema Enhancement** - Added `persona` column to project_contexts table
+
+**What's New:**
+- Click project name in header to edit name and description
+- Beautiful Windows 11-style edit modal (white, blue accents, smooth animations)
+- Custom confirmation dialogs with warning icons and professional styling
+- Immediate UI updates across header, tooltip, and dropdown
+- Master Workflow v5 returns description and persona fields
+- Update Project Info v1.1.0 workflow for database updates
+
+**Key Features:**
+- **Edit Modal:** Pre-filled inputs, auto-focus, click-outside-to-close, validation
+- **Custom Confirms:** Replaced "127.0.0.1:5500 says" with elegant modals
+- **State Management:** Proper loading/clearing of description and persona
+- **Cross-Device:** All changes persist via database
+- **Real-time Updates:** Header, tooltip, and dropdown refresh immediately
+
+**Technical Changes:**
+- Frontend: 4 new methods (openEditProjectInfoModal, updateProjectInfo, closeEditProjectInfoModal, showCustomConfirm)
+- Backend: Master Workflow v5 SELECT includes description/persona, Code3 normalization updated
+- Database: `ALTER TABLE project_contexts ADD COLUMN persona VARCHAR(100) DEFAULT 'dev_assistant'`
+- Endpoint: POST /webhook/update-project-info
+
+**Testing confirmed:**
+- ✅ Edit project name and description via modal
+- ✅ Changes persist after session close/reopen
+- ✅ Description shows correctly in tooltip for each project
+- ✅ Project list refreshes with updated names
+- ✅ Custom confirmation dialogs replace browser alerts
+
+### Previous Updates (Oct 24, 2025 - Session 6):
+🐛 **Chat v1.6.3 BUGFIX** - Counter visibility fix (counter now displays correctly)
+✅ **Counter Display Logic Fixed** - Counter displays based ONLY on "Show commit progress" setting
+✅ **Decoupled from Auto-Commit** - Counter visible even when auto-commit feature disabled
+✅ **Regression Fixed** - Counter was incorrectly hidden when auto-commit OFF
+
+### Previous Updates (Oct 24, 2025 - Session 5):
+✅ **Chat v1.6.2 PATCH** - Close Session + Multi-Device Counter Sync
+✅ **"Close Session" Button** - New AI Assistant dropdown option for explicit session close
+✅ **Auto-Commit on Close** - Session-end auto-commit without switching projects
+✅ **Tab Visibility API** - Auto-refreshes counter when tab regains focus
+✅ **Multi-Device Sync** - Solves stale counter problem across devices/tabs
+✅ **Backend Counter Refresh** - Queries conversation_history on tab focus
+
+### Previous Updates (Oct 23, 2025 - Session 4):
+🐛 **Chat v1.6.1 PATCH** - Counter persistence bug fix
+✅ **Counter Initialization** - Now initializes from loaded message count (backend/localStorage)
+✅ **Platform-Agnostic** - Uses conversation_history count, no localStorage dependency for counter
+✅ **Session Continuity** - Uncommitted message count preserved across reloads
+
+### Previous Updates (Oct 23, 2025 - Session 3):
+✅ **Chat v1.6.0 COMPLETE** - Auto-Commit Memory Management feature fully implemented
+✅ **Message Counter Tracking** - Tracks messages since last commit with visual progress
+✅ **Threshold-Based Auto-Commit** - Automatically commits when threshold reached (default: 50 messages)
+✅ **Session-End Auto-Commit** - Commits remaining messages when switching projects
+✅ **Visual Progress Indicator** - Live progress bar in chat header showing commit status
+✅ **Subtle Notifications** - Floating toast notifications for auto-commit events
+✅ **Config Integration** - All settings configurable via Config v1.8 Memory Management section
+
+**Chat v1.6.0 Features:**
+- Auto-commit to memory every N messages (configurable: 10-200, default: 50)
+- Session-end auto-commit when switching projects
+- Visual progress indicator: "🧠 Auto-Commit: X/Y" with progress bar
+- Subtle floating notifications for auto-commit events
+- Silent commit mode (no system messages, just notifications)
+- Fully integrated with Config v1.8 settings
+- Message counter resets after successful commit
+
+**Technical Implementation:**
+- New properties: `messagesSinceLastCommit`, `lastCommitTimestamp`
+- New methods: `commitToMemoryAuto()`, `checkAutoCommitThreshold()`, `updateCommitProgressIndicator()`, `showSubtleNotification()`
+- Tracks both user and AI messages (+2 per exchange)
+- Progress indicator CSS with animations
+- Async-aware project switching for session-end commits
+
+### Major Release (Oct 23, 2025 - Session 1) - Platform-Agnostic Chat Persistence:
+✅ **Load Conversation History workflow v1.1.0** - Database-backed history loading
+✅ **Chat v1.5.0 backend integration** - Tries database first, falls back to localStorage
+✅ **Master Workflow v2** - Integrated canvas with comprehensive documentation
+✅ **Cross-device testing confirmed** - Conversations persist across computers
+✅ **GitHub deployment complete** - All changes pushed and live
+✅ **"Get Recent history" bug fixed** - Query parameters working correctly
 
 ### Recent Fixes (Oct 20, 2025):
 ✅ Config panel scrolling fixed
 ✅ Switch Project dropdown working
 ✅ Configuration button functional
 ✅ Project header with hover tooltip (description + persona)
-✅ **n8n workflow persona bug fixed** - All personas now work correctly
+✅ n8n workflow persona bug fixed - All personas now work correctly
 
 
 ## ⚡ Quick Reference
@@ -58,7 +146,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Version | Status | Notes |
 |---------|--------|-------|
-| v1.5.0 | ✅ **CURRENT STABLE** | Persona assignment + config integration |
+| v1.6.4 | ✅ **CURRENT STABLE** | Editable project info + custom dialogs |
+| v1.6.3 | ✅ Complete | Counter visibility bugfix |
+| v1.6.2 | ✅ Complete | Close Session + Multi-Device counter sync |
+| v1.6.1 | ✅ Complete | Counter persistence bug fix (platform-agnostic) |
+| v1.6.0 | ✅ Complete | Auto-commit memory management + progress tracking |
+| v1.5.0 | ✅ Complete | Persona assignment + config integration |
 | v1.4.4 | ✅ Complete | Export/Import + multi-key fallback for migration |
 | v1.4.3 | ✅ Complete | localStorage enhancement + export/import implementation |
 | v1.4.2 | ✅ Complete | Model selection + database branch integration |
@@ -67,18 +160,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Config Version | Status | Notes |
 |---------------|--------|-------|
-| v1.7.4 | ✅ **CURRENT STABLE** | Config scrolling + auto-open fix (Oct 20) |
+| v1.8 | ✅ **CURRENT STABLE** | Memory Management section + auto-commit settings |
+| v1.7.4 | ✅ Complete | Config scrolling + auto-open fix (Oct 20) |
 | v1.7.3 | ✅ Complete | HTML structure fix for scrolling |
 | v1.7 | ✅ Complete | Complete 5-section config (Advanced + export/import) |
 | v1.6 | ✅ Complete | Advanced section with API timeout + max context |
 | v1.5 | ✅ Complete | Personas section improvements |
 
 **Key Files:**
-- `module-loader.js` - Module loading + Config pre-load + cached module handling
-- `modules/chat/chat-v1.5.0.js` - Persona system + header tooltip + project state
-- `modules/config/config-v1.7.js` (v1.7.4) - 5-section config + scrolling fix
+- `module-loader.js` - Module loading + Config pre-load + cached module handling (points to v1.6.4)
+- `modules/chat/chat-v1.6.4.js` - **NEW:** Editable project info + custom dialogs + full state management
+- `modules/config/config-v1.8.js` - 6-section config + Memory Management + scrolling fix
 - `styles.css` - Header positioning fix (position: relative)
-- `n8n Workflows/Master Workflow.json` - Backend persona handling (pickSystemPrompt fix)
+- `n8n Workflows/Master_Workflow_v5.json` - **NEW:** Returns description + persona fields
+- `n8n Workflows/Update_Project_Info_v1.1.0.json` - **NEW:** Edit project name/description endpoint
 
 **IMPORTANT - Storage Architecture Clarification:**
 The "multi-key fallback" feature tries different localStorage key patterns on the SAME domain. It does NOT fetch from external sources or different domains. Browser localStorage is domain-isolated - localhost data cannot access github.io data. For true cross-domain persistence, Phase 2 (external fetch) or Phase 3 (database backend) is required.

@@ -1,0 +1,151 @@
+{
+  "name": "Update Project Info v1.1.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "update-project-info",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        -320
+      ],
+      "id": "df92fb1e-cb1f-4d9c-aedb-f04af0e46abe",
+      "name": "Webhook: Update Project Trigger",
+      "webhookId": "update-project-info"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE project_contexts \nSET project_name = $1, description = $2 \nWHERE chat_session_id = $3\nRETURNING project_name, description, chat_session_id;",
+        "options": {
+          "queryReplacement": "={{ [$json.body.project_name, $json.body.description, $json.body.chat_session_id] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -288,
+        -320
+      ],
+      "id": "1aa935fd-71b6-42ea-b9b4-9cd2361575e0",
+      "name": "Postgres: Update Project",
+      "credentials": {
+        "postgres": {
+          "id": "wnjdz7ukUBDZySLN",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize response from Postgres update\nconst items = $input.all();\n\n// Check if update was successful (returned rows)\nif (items.length === 0) {\n  return [{\n    json: {\n      success: false,\n      error: \"Project not found or update failed\",\n      chat_session_id: $('Webhook: Update Project Trigger').first().json.body.chat_session_id\n    }\n  }];\n}\n\n// Extract updated project info\nconst updatedProject = items[0].json;\n\nreturn [{\n  json: {\n    success: true,\n    project_name: updatedProject.project_name,\n    description: updatedProject.description,\n    chat_session_id: updatedProject.chat_session_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -320
+      ],
+      "id": "7f42d346-b868-49c5-afe3-733da5fa2214",
+      "name": "Code: Normalize Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        -320
+      ],
+      "id": "724a6390-fa16-4f14-8dfe-5638e35ffc36",
+      "name": "Respond: Return Result"
+    },
+    {
+      "parameters": {
+        "content": "## Update Project Info Workflow\n\n\n**Purpose:** Updates project name and description in project_contexts table\n\n**Endpoint:** POST /webhook/update-project-info\n\n**Input:**\n```json\n{\n  \"chat_session_id\": \"session_xyz\",\n  \"project_name\": \"New Name\",\n  \"description\": \"New Description\"\n}\n```\n\n**Output:**\n```json\n{\n  \"success\": true,\n  \"project_name\": \"New Name\",\n  \"description\": \"New Description\",\n  \"chat_session_id\": \"session_xyz\"\n}\n```\n\n**Notes:**\n- Uses chat_session_id as immutable lookup key\n- Only updates project_name and description fields\n- Returns error if project not found\n- CORS enabled for GitHub Pages access",
+        "height": 80,
+        "width": 384
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -320,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "abdcbf1f-fd4f-48e8-a819-35466494231f",
+      "name": "Sticky Note: Documentation"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Update Project Trigger": {
+      "main": [
+        [
+          {
+            "node": "Postgres: Update Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: Update Project": {
+      "main": [
+        [
+          {
+            "node": "Code: Normalize Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Normalize Response": {
+      "main": [
+        [
+          {
+            "node": "Respond: Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4607b848-0cbb-430d-86a8-2c9b7465eabc",
+  "meta": {
+    "instanceId": "8fe1de58704fdaeb90ba65ff6b0aed2cf5efcb6cafc89641fb03be73646f227e"
+  },
+  "id": "gSP9IPylTVqcFOlX",
+  "tags": []
+}

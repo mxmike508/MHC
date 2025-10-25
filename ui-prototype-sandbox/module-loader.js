@@ -232,9 +232,9 @@ class ModuleLoader {
                 let moduleVersion = 'unknown';
 
                 if (moduleId === 'chat') {
-                    modulePath = `modules/${moduleId}/${moduleId}-v1.5.0.js?v=${timestamp}`;
+                    modulePath = `modules/${moduleId}/${moduleId}-v1.6.4.js?v=${timestamp}`;
                 } else if (moduleId === 'config') {
-                    modulePath = `modules/${moduleId}/${moduleId}-v1.7.js?v=${timestamp}`;
+                    modulePath = `modules/${moduleId}/${moduleId}-v1.8.js?v=${timestamp}`;
                 } else {
                     modulePath = `modules/${moduleId}/${moduleId}.js`;
                 }
